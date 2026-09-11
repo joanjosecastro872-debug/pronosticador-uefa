@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from scipy.stats import poisson
 
 # Configuración inicial de la página
 st.set_page_config(
-    page_title="Zohan Pronostic - UEFA Engine Pro Max",
+    page_title="Zohan Pronostic - UEFA Engine Pro",
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -31,30 +32,29 @@ st.markdown("""
         border: 1px solid #30363d;
         text-align: center;
     }
-    .analisis-box {
-        background-color: #1f242d;
-        padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid #58a6ff;
-        margin-top: 20px;
-        margin-bottom: 20px;
-    }
     </style>
 """, unsafe_allow_html=True)
 
 # Título Principal
-st.markdown("<h2 style='text-align: center; color: #58a6ff;'>🇪🇺 ZOHAN PRONOSTIC - MOTOR UEFA PRO MAX</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #8b949e;'>Simulación avanzada con Monte Carlo (3,000 reps), Cuotas Justas, Desglose Casa/Visita y Análisis Táctico.</p>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; color: #58a6ff;'>🇪🇺 ZOHAN PRONOSTIC - MOTOR UEFA & TABLA VIVA</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #8b949e;'>Sistema automatizado con memoria de sesión, desglose Casa/Visita, coeficientes de liga y Poisson.</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 # --- 1. DICCIONARIOS DE EQUIPOS OFICIALES (36 POR TORNEO) ---
 EQUIPOS_CHAMPIONS = {
+    # España
     "Real Madrid": "Top 1", "Barcelona": "Top 1", "Atlético de Madrid": "Top 1", "Villarreal": "Top 1", "Real Betis": "Top 1",
+    # Inglaterra
     "Manchester City": "Top 1", "Arsenal": "Top 1", "Liverpool": "Top 1", "Aston Villa": "Top 1", "Manchester United": "Top 1",
+    # Alemania
     "Bayern Múnich": "Top 1", "Borussia Dortmund": "Top 1", "VfB Stuttgart": "Top 1", "RB Leipzig": "Top 1",
+    # Italia
     "Inter de Milán": "Top 1", "Napoli": "Top 1", "Roma": "Top 1", "Como 1907": "Top 1",
+    # Francia
     "PSG": "Top 2", "Lille": "Top 2", "Lens": "Top 2",
+    # Países Bajos y Portugal
     "Feyenoord": "Top 2", "PSV Eindhoven": "Top 2", "Porto": "Top 2", "Sporting CP": "Top 2", "Benfica": "Top 2",
+    # Previas y Otros
     "Fenerbahçe": "Media / Alta", "Galatasaray": "Media / Alta", "Shakhtar Donetsk": "Media / Alta",
     "Club Brujas": "Media / Alta", "Bodø/Glimt": "Media", "Slavia Praga": "Media",
     "Slovan Bratislava": "Menor", "Sturm Graz": "Media", "LASK Linz": "Media",
@@ -90,11 +90,12 @@ EQUIPOS_CONFERENCE = {
     "CSKA Sofía": "Media", "Universitatea Craiova": "Media"
 }
 
-# --- 2. INICIALIZAR MEMORIA DE SESIÓN ---
+# --- 2. INICIALIZAR MEMORIA DE SESIÓN (SESSION STATE) ---
 if 'torneo_actual' not in st.session_state:
     st.session_state.torneo_actual = "UEFA Champions League"
 
 if 'standings' not in st.session_state:
+    # Inicializamos con Champions por defecto
     st.session_state.standings = {
         eq: {"PJ": 0, "G": 0, "E": 0, "P": 0, "GF": 0, "GA": 0, "Pts": 0, "Liga": liga,
              "Casa_PJ": 0, "Casa_GF": 0, "Casa_GA": 0,
@@ -109,6 +110,7 @@ torneo_uefa = st.selectbox(
     key="select_torneo"
 )
 
+# Si cambia el torneo, reiniciamos la estructura de la memoria con sus equipos correctos
 if torneo_uefa != st.session_state.torneo_actual:
     st.session_state.torneo_actual = torneo_uefa
     dic_sel = EQUIPOS_CHAMPIONS if torneo_uefa == "UEFA Champions League" else (EQUIPOS_EUROPA if torneo_uefa == "UEFA Europa League" else EQUIPOS_CONFERENCE)
@@ -124,16 +126,16 @@ st.markdown("---")
 
 # --- PESTAÑAS DE LA APLICACIÓN ---
 tab_juego, tab_tabla, tab_analisis = st.tabs([
-    "⚽ Registrar Partido", 
+    "⚽ Registrar Partido (Casa vs Visita)", 
     "📊 Tabla Viva de Posiciones", 
-    "🤖 Motor de Pronóstico (Monte Carlo + Poisson)"
+    "🤖 Motor de Pronóstico (Poisson)"
 ])
 
 lista_equipos = list(st.session_state.standings.keys())
 
 with tab_juego:
     st.markdown("### 🏟️ Carga de Resultados de la Jornada")
-    st.markdown("El sistema procesa los datos para la tabla general y separa automáticamente las estadísticas de **Casa** y **Visita**.")
+    st.markdown("El sistema procesa de forma automática los datos para la tabla general y separa las estadísticas de **Local (Casa)** y **Visitante** para los futuros pronósticos.")
     
     col_eq1, col_eq2 = st.columns(2)
 
@@ -153,20 +155,27 @@ with tab_juego:
         st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("💾 Registrar Partido en el Torneo", type="primary", use_container_width=True):
+        # 1. Actualizar General Local
         st.session_state.standings[equipo_local]["PJ"] += 1
         st.session_state.standings[equipo_local]["GF"] += goles_local
         st.session_state.standings[equipo_local]["GA"] += goles_visita
+        
+        # Actualizar Específico Casa
         st.session_state.standings[equipo_local]["Casa_PJ"] += 1
         st.session_state.standings[equipo_local]["Casa_GF"] += goles_local
         st.session_state.standings[equipo_local]["Casa_GA"] += goles_visita
 
+        # 2. Actualizar General Visitante
         st.session_state.standings[equipo_visita]["PJ"] += 1
         st.session_state.standings[equipo_visita]["GF"] += goles_visita
         st.session_state.standings[equipo_visita]["GA"] += goles_local
+        
+        # Actualizar Específico Visita
         st.session_state.standings[equipo_visita]["Visita_PJ"] += 1
         st.session_state.standings[equipo_visita]["Visita_GF"] += goles_visita
         st.session_state.standings[equipo_visita]["Visita_GA"] += goles_local
 
+        # 3. Lógica de Puntos
         if goles_local > goles_visita:
             st.session_state.standings[equipo_local]["G"] += 1
             st.session_state.standings[equipo_local]["Pts"] += 3
@@ -185,7 +194,7 @@ with tab_juego:
 
 with tab_tabla:
     st.markdown(f"### 📊 Tabla General de Posiciones - {torneo_uefa}")
-    st.markdown("Ordenada automáticamente por Criterios UEFA (Puntos ➔ Diferencia de Goles ➔ Goles a Favor).")
+    st.markdown("Ordenada automáticamente por Criterios Oficiales UEFA (Puntos ➔ Diferencia de Goles ➔ Goles a Favor).")
     
     data_list = []
     for eq, stats in st.session_state.standings.items():
@@ -205,7 +214,7 @@ with tab_tabla:
     
     df_standings = pd.DataFrame(data_list)
     df_standings = df_standings.sort_values(by=["Pts", "DG", "GF"], ascending=False).reset_index(drop=True)
-    df_standings.index += 1
+    df_standings.index += 1 # Posición en tabla del 1 al 36
     
     st.dataframe(df_standings, use_container_width=True)
     
@@ -220,8 +229,8 @@ with tab_tabla:
         st.rerun()
 
 with tab_analisis:
-    st.markdown("### 🤖 Motor de Pronóstico Avanzado (Monte Carlo + Poisson)")
-    st.markdown("Simula el encuentro **3,000 veces** cruzando condición de local/visitante, coeficientes de liga y distribuciones de Poisson.")
+    st.markdown("### 🤖 Motor Matemático de Pronóstico (Poisson + Casa/Visita)")
+    st.markdown("Cruza el rendimiento específico del local en su estadio frente al rendimiento del visitante en carretera.")
     
     col_p1, col_p2 = st.columns(2)
     with col_p1:
@@ -229,15 +238,16 @@ with tab_analisis:
     with col_p2:
         pred_visita = st.selectbox("Selecciona Visitante para Pronóstico", [e for e in lista_equipos if e != pred_local], key="p_vis")
         
-    if st.button("⚡ Ejecutar Simulación (3,000 Repeticiones)", type="primary"):
+    if st.button("⚡ Calcular Probabilidades del Partido", type="primary"):
+        # Obtener métricas internas de Casa y Visita registradas en la memoria
         stats_l = st.session_state.standings[pred_local]
         stats_v = st.session_state.standings[pred_visita]
         
-        # Expectativas base de goles
+        # Promedios de goles Casa vs Visita (con base defensiva/ofensiva por defecto si van 0 partidos)
         lam_l = (stats_l["Casa_GF"] / max(stats_l["Casa_PJ"], 1)) if stats_l["Casa_PJ"] > 0 else 1.5
         lam_v = (stats_v["Visita_GF"] / max(stats_v["Visita_PJ"], 1)) if stats_v["Visita_PJ"] > 0 else 1.1
         
-        # Coeficientes de nivel de liga
+        # Ajuste de coeficiente de liga simple
         coef_map = {"Top 1": 1.2, "Top 2": 1.1, "Media / Alta": 1.0, "Media": 0.9, "Menor": 0.8}
         f_l = coef_map.get(stats_l["Liga"], 1.0)
         f_v = coef_map.get(stats_v["Liga"], 1.0)
@@ -245,62 +255,23 @@ with tab_analisis:
         lambda_local_final = lam_l * f_l
         lambda_visita_final = lam_v * f_v
         
-        # --- SIMULACIÓN MONTE CARLO (3,000 repeticiones) ---
-        np.random.seed(42)
-        sim_goles_local = np.random.poisson(lambda_local_final, 3000)
-        sim_goles_visita = np.random.poisson(lambda_visita_final, 3000)
+        # Simulación Poisson matriz 6x6
+        prob_matrix = np.outer(
+            [poisson.pmf(i, lambda_local_final) for i in range(6)],
+            [poisson.pmf(j, lambda_visita_final) for j in range(6)]
+        )
         
-        vueltas_local = np.sum(sim_goles_local > sim_goles_visita)
-        vueltas_empate = np.sum(sim_goles_local == sim_goles_visita)
-        vueltas_visita = np.sum(sim_goles_local < sim_goles_visita)
+        win_local = np.sum(np.tril(prob_matrix, -1))
+        empate = np.sum(np.diag(prob_matrix))
+        win_visita = np.sum(np.triu(prob_matrix, 1))
         
-        prob_l = (vueltas_local / 3000) * 100
-        prob_e = (vueltas_empate / 3000) * 100
-        prob_v = (vueltas_visita / 3000) * 100
-        
-        btts_prob = (np.sum((sim_goles_local > 0) & (sim_goles_visita > 0)) / 3000) * 100
-        over_25 = (np.sum((sim_goles_local + sim_goles_visita) > 2.5) / 3000) * 100
-        
-        cuota_l = 100 / prob_l if prob_l > 0 else 99.0
-        cuota_e = 100 / prob_e if prob_e > 0 else 99.0
-        cuota_v = 100 / prob_v if prob_v > 0 else 99.0
-
         st.markdown("---")
-        st.markdown("#### 📊 Probabilidades de Resultado (Monte Carlo)")
         res_c1, res_c2, res_c3 = st.columns(3)
         with res_c1:
-            st.markdown(f"<div class='metric-card'><h4>Gana {pred_local}</h4><h2>{prob_l:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Cuota Justa: <b>{cuota_l:.2f}</b></p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><h4>Gana {pred_local}</h4><h2>{win_local*100:.1f}%</h2></div>", unsafe_allow_html=True)
         with res_c2:
-            st.markdown(f"<div class='metric-card'><h4>Empate</h4><h2>{prob_e:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Cuota Justa: <b>{cuota_e:.2f}</b></p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><h4>Empate</h4><h2>{empate*100:.1f}%</h2></div>", unsafe_allow_html=True)
         with res_c3:
-            st.markdown(f"<div class='metric-card'><h4>Gana {pred_visita}</h4><h2>{prob_v:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Cuota Justa: <b>{cuota_v:.2f}</b></p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><h4>Gana {pred_visita}</h4><h2>{win_visita*100:.1f}%</h2></div>", unsafe_allow_html=True)
             
-        st.markdown("---")
-        extra_c1, extra_c2, extra_c3 = st.columns(3)
-        with extra_c1:
-            st.metric(label="⚽ Expectativa de Goles (xG)", value=f"{lambda_local_final:.2f} - {lambda_visita_final:.2f}")
-        with extra_c2:
-            st.metric(label="🔥 Ambos Anotan (BTTS)", value=f"{btts_prob:.1f}%")
-        with extra_c3:
-            st.metric(label="📈 Más de 2.5 Goles (Over)", value=f"{over_25:.1f}%")
-
-        # --- LÓGICA DE MENSAJES Y ANÁLISIS INTELIGENTE ---
-        total_xg = lambda_local_final + lambda_visita_final
-        diff_prob = abs(prob_l - prob_v)
-
-        if btts_prob > 65 and total_xg > 2.8:
-            comentario = f"🔥 **Análisis Zohan:** ¡Duelo de poder a poder! Tanto **{pred_local}** como **{pred_visita}** llegan con una pegada tremenda y defensas que conceden espacios. El modelo huele sangre: alta probabilidad de goles en ambos arcos y un ritmo frenético desde el minuto uno. ¡Pinta para partidazo de ida y vuelta!"
-        elif total_xg < 2.0 and prob_e > 30:
-            comentario = f"♟️ **Análisis Zohan:** Ajá, aquí hay respeto mutuo. Es un ajedrez táctico entre dos planteles donde nadie quiere regalar nada. El margen de error es mínimo y se va a definir por detalles o una pelota quieta. No esperes una lluvia de goles."
-        elif diff_prob > 35:
-            favorito = pred_local if prob_l > prob_v else pred_visita
-            comentario = f"⚡ **Análisis Zohan:** Desequilibrio notable en el papel. **{favorito}** muestra una superioridad clara tanto en su coeficiente de liga como en su producción ofensiva. Si el rival no se repliega bien, le van a armar un show en su propia cancha."
-        else:
-            comentario = f"⚖️ **Análisis Zohan:** Empate técnico absoluto o cruce súper cerrado. Las simulaciones de Monte Carlo no ven un claro dominador. Cualquier error en salida o genialidad individual va a inclinar la balanza. Partido para alquilar balcón."
-
-        st.markdown(f"""
-            <div class='analisis-box'>
-                <h4>🧠 Diagnóstico Táctico Automático</h4>
-                <p style='font-size: 16px; line-height: 1.5; color: #f0f6fc; margin-bottom: 0;'>{comentario}</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.info(f"💡 **Expectativa de Goles (xG ajustado):** {pred_local} **{lambda_local_final:.2f}** - **{lambda_visita_final:.2f}** {pred_visita}")
