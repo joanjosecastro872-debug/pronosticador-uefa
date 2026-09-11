@@ -375,3 +375,4 @@ if len(st.session_state.historial_partidos) > 0:
         st.session_state.historial_partidos = []
         st.success("¡Historial de la jornada limpiado con éxito! Las tablas se mantienen intactas con sus puntos y goles.")
         st.rerun()
+
