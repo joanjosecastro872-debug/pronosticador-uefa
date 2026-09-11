@@ -44,7 +44,7 @@ st.markdown("""
 
 # Título Principal
 st.markdown("<h2 style='text-align: center; color: #58a6ff;'>🇪🇺 ZOHAN PRONOSTIC - MOTOR UEFA PRO MAX</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #8b949e;'>Simulación avanzada con Monte Carlo (3,000 reps), Historial de Partidos, Resultados Exactos y Análisis Táctico.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #8b949e;'>Simulación avanzada con Monte Carlo (3,000 reps), Cuotas Justas, Desglose Casa/Visita y Análisis Táctico.</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 # --- 1. DICCIONARIOS DE EQUIPOS OFICIALES (36 POR TORNEO) ---
@@ -102,9 +102,6 @@ if 'standings' not in st.session_state:
         for eq, liga in EQUIPOS_CHAMPIONS.items()
     }
 
-if 'historial_partidos' not in st.session_state:
-    st.session_state.historial_partidos = []
-
 # --- SELECTOR DE TORNEO ---
 torneo_uefa = st.selectbox(
     "🏆 Selecciona la Competición Europea",
@@ -121,14 +118,13 @@ if torneo_uefa != st.session_state.torneo_actual:
              "Visita_PJ": 0, "Visita_GF": 0, "Visita_GA": 0}
         for eq, liga in dic_sel.items()
     }
-    st.session_state.historial_partidos = []
     st.rerun()
 
 st.markdown("---")
 
 # --- PESTAÑAS DE LA APLICACIÓN ---
 tab_juego, tab_tabla, tab_analisis = st.tabs([
-    "⚽ Registrar Partido & Historial", 
+    "⚽ Registrar Partido", 
     "📊 Tabla Viva de Posiciones", 
     "🤖 Motor de Pronóstico (Monte Carlo + Poisson)"
 ])
@@ -137,7 +133,7 @@ lista_equipos = list(st.session_state.standings.keys())
 
 with tab_juego:
     st.markdown("### 🏟️ Carga de Resultados de la Jornada")
-    st.markdown("Registra los marcadores. El sistema actualiza la tabla y guarda un historial detallado por si necesitas borrar alguno.")
+    st.markdown("El sistema procesa los datos para la tabla general y separa automáticamente las estadísticas de **Casa** y **Visita**.")
     
     col_eq1, col_eq2 = st.columns(2)
 
@@ -157,7 +153,6 @@ with tab_juego:
         st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("💾 Registrar Partido en el Torneo", type="primary", use_container_width=True):
-        # Actualizar estadísticas de equipos
         st.session_state.standings[equipo_local]["PJ"] += 1
         st.session_state.standings[equipo_local]["GF"] += goles_local
         st.session_state.standings[equipo_local]["GA"] += goles_visita
@@ -186,69 +181,7 @@ with tab_juego:
             st.session_state.standings[equipo_visita]["E"] += 1
             st.session_state.standings[equipo_visita]["Pts"] += 1
             
-        # Guardar en el historial de partidos
-        partido_id = len(st.session_state.historial_partidos) + 1
-        st.session_state.historial_partidos.append({
-            "id": partido_id,
-            "local": equipo_local,
-            "g_loc": goles_local,
-            "g_vis": goles_visita,
-            "visita": equipo_visita
-        })
-            
-        st.success(f"¡Marcador guardado con éxito! {equipo_local} {goles_local} - {goles_visita} {equipo_visita}")
-
-    # --- HISTORIAL DE PARTIDOS CON BOTÓN DE BORRAR ---
-    st.markdown("---")
-    st.markdown("### 📋 Historial de Partidos Registrados")
-    if len(st.session_state.historial_partidos) == 0:
-        st.info("No hay partidos registrados todavía.")
-    else:
-        st.markdown("Si cometiste un error en algún partido, puedes eliminarlo aquí y la tabla se recalculará automáticamente.")
-        for p in reversed(st.session_state.historial_partidos):
-            col_h1, col_h2 = st.columns([4, 1])
-            with col_h1:
-                st.markdown(f"**Partido #{p['id']}**: {p['local']} **{p['g_loc']} - {p['g_vis']}** {p['visita']}")
-            with col_h2:
-                if st.button("🗑️ Borrar", key=f"del_{p['id']}"):
-                    # Revertir estadísticas del partido borrado
-                    loc = p['local']
-                    vis = p['visita']
-                    gl = p['g_loc']
-                    gv = p['g_vis']
-
-                    st.session_state.standings[loc]["PJ"] -= 1
-                    st.session_state.standings[loc]["GF"] -= gl
-                    st.session_state.standings[loc]["GA"] -= gv
-                    st.session_state.standings[loc]["Casa_PJ"] -= 1
-                    st.session_state.standings[loc]["Casa_GF"] -= gl
-                    st.session_state.standings[loc]["Casa_GA"] -= gv
-
-                    st.session_state.standings[vis]["PJ"] -= 1
-                    st.session_state.standings[vis]["GF"] -= gv
-                    st.session_state.standings[vis]["GA"] -= gl
-                    st.session_state.standings[vis]["Visita_PJ"] -= 1
-                    st.session_state.standings[vis]["Visita_GF"] -= gv
-                    st.session_state.standings[vis]["Visita_GA"] -= gl
-
-                    if gl > gv:
-                        st.session_state.standings[loc]["G"] -= 1
-                        st.session_state.standings[loc]["Pts"] -= 3
-                        st.session_state.standings[vis]["P"] -= 1
-                    elif gv > gl:
-                        st.session_state.standings[vis]["G"] -= 1
-                        st.session_state.standings[vis]["Pts"] -= 3
-                        st.session_state.standings[loc]["P"] -= 1
-                    else:
-                        st.session_state.standings[loc]["E"] -= 1
-                        st.session_state.standings[loc]["Pts"] -= 1
-                        st.session_state.standings[vis]["E"] -= 1
-                        st.session_state.standings[vis]["Pts"] -= 1
-
-                    # Eliminar del historial
-                    st.session_state.historial_partidos = [x for x in st.session_state.historial_partidos if x["id"] != p["id"]]
-                    st.success(f"Partido #{p['id']} eliminado correctamente.")
-                    st.rerun()
+        st.success(f"¡Marcador guardado! {equipo_local} {goles_local} - {goles_visita} {equipo_visita} procesado correctamente.")
 
 with tab_tabla:
     st.markdown(f"### 📊 Tabla General de Posiciones - {torneo_uefa}")
@@ -276,7 +209,7 @@ with tab_tabla:
     
     st.dataframe(df_standings, use_container_width=True)
     
-    if st.button("🔄 Reiniciar Todo el Torneo (Borrar Datos y Historial)"):
+    if st.button("🔄 Reiniciar Todo el Torneo (Borrar Datos)"):
         dic_sel = EQUIPOS_CHAMPIONS if torneo_uefa == "UEFA Champions League" else (EQUIPOS_EUROPA if torneo_uefa == "UEFA Europa League" else EQUIPOS_CONFERENCE)
         st.session_state.standings = {
             eq: {"PJ": 0, "G": 0, "E": 0, "P": 0, "GF": 0, "GA": 0, "Pts": 0, "Liga": liga,
@@ -284,12 +217,11 @@ with tab_tabla:
                  "Visita_PJ": 0, "Visita_GF": 0, "Visita_GA": 0}
             for eq, liga in dic_sel.items()
         }
-        st.session_state.historial_partidos = []
         st.rerun()
 
 with tab_analisis:
     st.markdown("### 🤖 Motor de Pronóstico Avanzado (Monte Carlo + Poisson)")
-    st.markdown("Simula el encuentro **3,000 veces** con desglose exacto de victorias, empates y marcadores más repetidos.")
+    st.markdown("Simula el encuentro **3,000 veces** cruzando condición de local/visitante, coeficientes de liga y distribuciones de Poisson.")
     
     col_p1, col_p2 = st.columns(2)
     with col_p1:
@@ -318,9 +250,9 @@ with tab_analisis:
         sim_goles_local = np.random.poisson(lambda_local_final, 3000)
         sim_goles_visita = np.random.poisson(lambda_visita_final, 3000)
         
-        vueltas_local = int(np.sum(sim_goles_local > sim_goles_visita))
-        vueltas_empate = int(np.sum(sim_goles_local == sim_goles_visita))
-        vueltas_visita = int(np.sum(sim_goles_local < sim_goles_visita))
+        vueltas_local = np.sum(sim_goles_local > sim_goles_visita)
+        vueltas_empate = np.sum(sim_goles_local == sim_goles_visita)
+        vueltas_visita = np.sum(sim_goles_local < sim_goles_visita)
         
         prob_l = (vueltas_local / 3000) * 100
         prob_e = (vueltas_empate / 3000) * 100
@@ -333,20 +265,15 @@ with tab_analisis:
         cuota_e = 100 / prob_e if prob_e > 0 else 99.0
         cuota_v = 100 / prob_v if prob_v > 0 else 99.0
 
-        # Calcular resultados exactos más frecuentes en las simulaciones
-        df_sim = pd.DataFrame({"L": sim_goles_local, "V": sim_goles_visita})
-        df_sim["Marcador"] = df_sim["L"].astype(str) + " - " + df_sim["V"].astype(str)
-        top_marcadores = df_sim["Marcador"].value_counts().head(3)
-
         st.markdown("---")
-        st.markdown("#### 📊 Probabilidades y Desglose de las 3,000 Simulaciones")
+        st.markdown("#### 📊 Probabilidades de Resultado (Monte Carlo)")
         res_c1, res_c2, res_c3 = st.columns(3)
         with res_c1:
-            st.markdown(f"<div class='metric-card'><h4>Gana {pred_local}</h4><h2>{prob_l:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Victorias: <b>{vueltas_local} / 3000</b><br>Cuota Justa: <b>{cuota_l:.2f}</b></p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><h4>Gana {pred_local}</h4><h2>{prob_l:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Cuota Justa: <b>{cuota_l:.2f}</b></p></div>", unsafe_allow_html=True)
         with res_c2:
-            st.markdown(f"<div class='metric-card'><h4>Empate</h4><h2>{prob_e:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Empates: <b>{vueltas_empate} / 3000</b><br>Cuota Justa: <b>{cuota_e:.2f}</b></p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><h4>Empate</h4><h2>{prob_e:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Cuota Justa: <b>{cuota_e:.2f}</b></p></div>", unsafe_allow_html=True)
         with res_c3:
-            st.markdown(f"<div class='metric-card'><h4>Gana {pred_visita}</h4><h2>{prob_v:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Victorias: <b>{vueltas_visita} / 3000</b><br>Cuota Justa: <b>{cuota_v:.2f}</b></p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><h4>Gana {pred_visita}</h4><h2>{prob_v:.1f}%</h2><p style='color: #8b949e; font-size: 14px;'>Cuota Justa: <b>{cuota_v:.2f}</b></p></div>", unsafe_allow_html=True)
             
         st.markdown("---")
         extra_c1, extra_c2, extra_c3 = st.columns(3)
@@ -357,28 +284,19 @@ with tab_analisis:
         with extra_c3:
             st.metric(label="📈 Más de 2.5 Goles (Over)", value=f"{over_25:.1f}%")
 
-        # Mostrar los marcadores exactos más repetidos
-        st.markdown("#### 🎯 Top 3 Resultados Exactos más Frecuentes en las Simulaciones")
-        m_col1, m_col2, m_col3 = st.columns(3)
-        cols_m = [m_col1, m_col2, m_col3]
-        for i, (marcador, veces) in enumerate(top_marcadores.items()):
-            porcentaje_m = (veces / 3000) * 100
-            with cols_m[i]:
-                st.markdown(f"<div class='metric-card' style='padding: 10px;'><h3 style='margin: 0; color: #58a6ff;'>{marcador}</h3><p style='margin: 5px 0 0 0; color: #8b949e; font-size: 13px;'>Repetido {veces} veces ({porcentaje_m:.1f}%)</p></div>", unsafe_allow_html=True)
-
         # --- LÓGICA DE MENSAJES Y ANÁLISIS INTELIGENTE ---
         total_xg = lambda_local_final + lambda_visita_final
         diff_prob = abs(prob_l - prob_v)
 
         if btts_prob > 65 and total_xg > 2.8:
-            comentario = f"🔥 **Análisis Zohan:** ¡Duelo de poder a poder! Tanto **{pred_local}** como **{pred_visita}** llegan con una pegada tremenda. El modelo huele sangre: alta probabilidad de goles en ambos arcos y un ritmo frenético desde el minuto uno."
+            comentario = f"🔥 **Análisis Zohan:** ¡Duelo de poder a poder! Tanto **{pred_local}** como **{pred_visita}** llegan con una pegada tremenda y defensas que conceden espacios. El modelo huele sangre: alta probabilidad de goles en ambos arcos y un ritmo frenético desde el minuto uno. ¡Pinta para partidazo de ida y vuelta!"
         elif total_xg < 2.0 and prob_e > 30:
-            comentario = f"♟️ **Análisis Zohan:** Ajá, aquí hay respeto mutuo. Es un ajedrez táctico entre dos planteles donde nadie quiere regalar nada. El margen de error es mínimo y se va a definir por detalles."
+            comentario = f"♟️ **Análisis Zohan:** Ajá, aquí hay respeto mutuo. Es un ajedrez táctico entre dos planteles donde nadie quiere regalar nada. El margen de error es mínimo y se va a definir por detalles o una pelota quieta. No esperes una lluvia de goles."
         elif diff_prob > 35:
             favorito = pred_local if prob_l > prob_v else pred_visita
-            comentario = f"⚡ **Análisis Zohan:** Desequilibrio notable en el papel. **{favorito}** muestra una superioridad clara en su coeficiente de rendimiento y producción ofensiva."
+            comentario = f"⚡ **Análisis Zohan:** Desequilibrio notable en el papel. **{favorito}** muestra una superioridad clara tanto en su coeficiente de liga como en su producción ofensiva. Si el rival no se repliega bien, le van a armar un show en su propia cancha."
         else:
-            comentario = f"⚖️ **Análisis Zohan:** Empate técnico absoluto o cruce súper cerrado. Las simulaciones de Monte Carlo no ven un claro dominador. Cualquier genialidad individual va a inclinar la balanza."
+            comentario = f"⚖️ **Análisis Zohan:** Empate técnico absoluto o cruce súper cerrado. Las simulaciones de Monte Carlo no ven un claro dominador. Cualquier error en salida o genialidad individual va a inclinar la balanza. Partido para alquilar balcón."
 
         st.markdown(f"""
             <div class='analisis-box'>
