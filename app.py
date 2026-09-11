@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import math
-from collections import Counter
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -12,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS en Modo Oscuro Profesional para Móvil y Escritorio
+# Estilos CSS en Modo Oscuro Profesional
 st.markdown("""
     <style>
     .stApp {
@@ -102,7 +100,7 @@ for torneo_key, dict_eq in [("Champions", EQUIPOS_CHAMPIONS), ("Europa", EQUIPOS
 if 'historial_partidos' not in st.session_state:
     st.session_state.historial_partidos = []
 
-# --- 3. BOTONES DE NAVEGACIÓN ESTILO PESTAÑA (OPTIMIZADO PARA MÓVIL) ---
+# --- 3. BOTONES DE NAVEGACIÓN HORIZONTALES (ESTILO MÓVIL) ---
 col_b1, col_b2, col_b3 = st.columns(3)
 with col_b1:
     if st.button("🌟 Champions", use_container_width=True):
@@ -114,7 +112,6 @@ with col_b3:
     if st.button("🥉 Conference", use_container_width=True):
         st.session_state.torneo_actual = "Conference"
 
-# Mapear diccionario actual según selección
 if st.session_state.torneo_actual == "Champions":
     nombre_torneo_completo = "UEFA Champions League"
     dic_equipos = EQUIPOS_CHAMPIONS
@@ -133,7 +130,7 @@ current_standings = st.session_state[standings_key]
 st.markdown(f"<p style='text-align: center; color: #58a6ff; font-weight: bold;'>Competición Activa: {nombre_torneo_completo}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 4. SECCIÓN DE REGISTRO DE PARTIDOS ---
+# --- 4. REGISTRO DE PARTIDOS ---
 st.markdown("### 📝 Registrar Partido de la Jornada")
 col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns([2, 1, 1, 2, 1])
 
@@ -334,7 +331,7 @@ if st.button("🚀 EJECUTAR MONTE CARLO", type="primary", use_container_width=Tr
             st.markdown(f"<li><b>{m[0]} - {m[1]}</b> ➔ <b>{prob:.1f}%</b></li>", unsafe_allow_html=True)
 
         st.markdown("</ul></div>", unsafe_allow_html=True)
-        st.success("¡Simulación completada con éxito en el teléfono!")
+        st.success("¡Simulación completada con éxito!")
 
 # --- 8. HISTORIAL Y LIMPIEZA ---
 if len(st.session_state.historial_partidos) > 0:
