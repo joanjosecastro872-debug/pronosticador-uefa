@@ -96,7 +96,7 @@ EQUIPOS_CONFERENCE = {
 if 'torneo_actual' not in st.session_state:
     st.session_state.torneo_actual = "UEFA Champions League"
 
-# Diccionarios separados por torneo en session_state para no perder datos al cambiar
+# Diccionarios separados por torneo en session_state
 for torneo_key, dict_eq in [("Champions", EQUIPOS_CHAMPIONS), ("Europa", EQUIPOS_EUROPA), ("Conference", EQUIPOS_CONFERENCE)]:
     key_name = f"standings_{torneo_key}"
     if key_name not in st.session_state:
@@ -110,23 +110,30 @@ for torneo_key, dict_eq in [("Champions", EQUIPOS_CHAMPIONS), ("Europa", EQUIPOS
 if 'historial_partidos' not in st.session_state:
     st.session_state.historial_partidos = []
 
-# --- 3. SELECTOR DE TORNEO ---
-st.markdown("### 🏆 Selección de Competición UEFA")
-col_t1, col_t2, col_t3 = st.columns(3)
+# --- 3. PESTAÑAS DESLIZANTES HORIZONTALES (ESTILO ORIGINAL) ---
+pestana_champions, pestana_europa, pestana_conference = st.tabs([
+    "🌟 UEFA Champions League", 
+    "🥈 UEFA Europa League", 
+    "🥉 UEFA Conference League"
+])
 
-with col_t1:
-    if st.button("🌟 Champions League", use_container_width=True):
+# Sincronizar la pestaña seleccionada con la sesión activa
+with pestana_champions:
+    if st.session_state.torneo_actual != "UEFA Champions League":
         st.session_state.torneo_actual = "UEFA Champions League"
-with col_t2:
-    if st.button("🥈 Europa League", use_container_width=True):
+        st.rerun()
+
+with pestana_europa:
+    if st.session_state.torneo_actual != "UEFA Europa League":
         st.session_state.torneo_actual = "UEFA Europa League"
-with col_t3:
-    if st.button("🥉 Conference League", use_container_width=True):
+        st.rerun()
+
+with pestana_conference:
+    if st.session_state.torneo_actual != "UEFA Conference League":
         st.session_state.torneo_actual = "UEFA Conference League"
+        st.rerun()
 
-st.info(f"Torneo Activo: **{st.session_state.torneo_actual}**")
-
-# Mapear diccionario actual
+# Mapear diccionario según el torneo activo en la pestaña
 if st.session_state.torneo_actual == "UEFA Champions League":
     dic_equipos = EQUIPOS_CHAMPIONS
     standings_key = "standings_Champions"
@@ -139,6 +146,7 @@ else:
 
 current_standings = st.session_state[standings_key]
 
+st.markdown(f"<p style='text-align: center; color: #58a6ff; font-weight: bold;'>Competición Activa en Pantalla: {st.session_state.torneo_actual}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 # --- 4. SECCIÓN DE REGISTRO DE PARTIDOS (TABLA DE POSICIONES) ---
@@ -193,7 +201,7 @@ if registrar_btn:
             current_standings[eq_vis_reg]["E"] += 1
             current_standings[eq_vis_reg]["Pts"] += 1
 
-        # Guardar en historial general con la competencia actual
+        # Guardar en historial general
         st.session_state.historial_partidos.append({
             "Torneo": st.session_state.torneo_actual,
             "Local": eq_local_reg,
@@ -234,13 +242,9 @@ st.markdown("---")
 
 # --- 6. FUNCIÓN DE MEMORIA INTELIGENTE (H2H Y ANTECEDENTES) ---
 def obtener_memoria_historica(eq_local, eq_visita, historial_partidos):
-    """
-    Consulta la memoria de sesión para extraer antecedentes directos o apuros recientes.
-    """
     if not historial_partidos:
         return "🧠 **Memoria Inteligente:** Sin duelos previos registrados en esta sesión; el motor opera con los datos base de la tabla actual."
     
-    # Filtrar historial de la competencia actual
     duelos_directos = [
         p for p in historial_partidos 
         if p['Torneo'] == st.session_state.torneo_actual and 
@@ -269,7 +273,6 @@ if st.button("🚀 EJECUTAR MOTOR MONTE CARLO (CON DATOS DE TABLA)", type="prima
     if eq_sim_local == eq_sim_vis:
         st.error("⚠️ Elige equipos distintos para la simulación.")
     else:
-        # Extraer datos reales de la tabla acumulada
         stats_l = current_standings[eq_sim_local]
         stats_v = current_standings[eq_sim_vis]
 
@@ -288,11 +291,9 @@ if st.button("🚀 EJECUTAR MOTOR MONTE CARLO (CON DATOS DE TABLA)", type="prima
             lambda_l = 1.8 if stats_l["Liga"] in ["Top 1", "Top 2"] else 1.2
             lambda_v = 1.4 if stats_v["Liga"] in ["Top 1", "Top 2"] else 0.9
         else:
-            # xG cruzado usando los datos reales de la tabla con piso de seguridad de 0.5
             lambda_l = max(0.5, (gf_casa_l + ga_vis_v) / 2.0)
             lambda_v = max(0.5, (gf_vis_v + ga_casa_l) / 2.0)
 
-        # Simulación de Monte Carlo (3,000 repeticiones) con Poisson
         simulaciones = 3000
         goles_sim_l = np.random.poisson(lambda_l, simulaciones)
         goles_sim_v = np.random.poisson(lambda_v, simulaciones)
@@ -309,10 +310,8 @@ if st.button("🚀 EJECUTAR MOTOR MONTE CARLO (CON DATOS DE TABLA)", type="prima
         p_over = (overs / simulaciones) * 100
         p_btts = (btts / simulaciones) * 100
 
-        # Obtener nota de la memoria inteligente
         nota_memoria = obtener_memoria_historica(eq_sim_local, eq_sim_vis, st.session_state.historial_partidos)
 
-        # Análisis Táctico Dinámico
         xg_total = lambda_l + lambda_v
         diferencia_xg = abs(lambda_l - lambda_v)
         
@@ -328,7 +327,6 @@ if st.button("🚀 EJECUTAR MOTOR MONTE CARLO (CON DATOS DE TABLA)", type="prima
         else:
             texto_analisis = f"🔍 Duelo tácticamente interesante. El **{eq_sim_local}** buscará imponer su localía ante un **{eq_sim_vis}** que intentará raspar puntos."
 
-        # Calcular top marcadores exactos
         conteo_marcadores = {}
         for gl, gv in zip(goles_sim_l, goles_sim_v):
             k = (int(gl), int(gv))
@@ -336,7 +334,6 @@ if st.button("🚀 EJECUTAR MOTOR MONTE CARLO (CON DATOS DE TABLA)", type="prima
 
         top_5 = sorted(conteo_marcadores.items(), key=lambda x: x[1], reverse=True)[:5]
 
-        # Mostrar resultados con diseño limpio original
         st.markdown(f"""
             <div class='card'>
                 <h4>🔬 Resultados del Motor Monte Carlo (Basado en la Tabla Real)</h4>
