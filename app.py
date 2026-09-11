@@ -19,12 +19,11 @@ st.markdown("""
     .card { background-color: #161b22; padding: 20px; border-radius: 12px; border: 1px solid #30363d; margin-bottom: 20px; }
     .metric-card { background-color: #21262d; padding: 15px; border-radius: 8px; border: 1px solid #30363d; text-align: center; }
     .analisis-box { background-color: #1f242d; padding: 20px; border-radius: 10px; border-left: 5px solid #58a6ff; margin-top: 15px; margin-bottom: 15px; }
-    .warning-box { background-color: #2d2217; padding: 15px; border-radius: 10px; border-left: 5px solid #d29922; margin-top: 10px; margin-bottom: 10px; color: #f0f6fc; }
     </style>
 """, unsafe_allow_html=True)
 
 # Título Principal
-st.markdown("<h2 style='text-align: center; color: #58a6ff;'>🇪🇺 ZOHAN PRONOSTIC - FILTRO DE GOLEADAS</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; color: #58a6ff;'>🇪🇺 ZOHAN PRONOSTIC - MARCADORES EXACTOS DIRECTOS</h2>", unsafe_allow_html=True)
 st.markdown("---")
 
 # --- DICCIONARIOS DE EQUIPOS ---
@@ -80,8 +79,7 @@ def inicializar_estado():
             st.session_state[key_standings] = {
                 eq: {
                     "PJ": 0, "G": 0, "E": 0, "P": 0, "GF": 0, "GA": 0, "Pts": 0, "Liga": liga,
-                    "GF_Ajustados": 0, "GA_Ajustados": 0, # Para el filtro de goleadas
-                    "Racha": [], "Partidos_Sufridos": [], "Goleadas_Registradas": []
+                    "Racha": [], "Partidos_Sufridos": []
                 }
                 for eq, liga in dict_eq.items()
             }
@@ -113,7 +111,7 @@ st.markdown("---")
 tab_juego, tab_tabla, tab_analisis, tab_historial, tab_respaldo = st.tabs([
     "⚽ Registrar Partido", 
     "📊 Tabla Viva", 
-    "🤖 Pronóstico Calibrado",
+    "🤖 Pronóstico y Marcadores",
     "📜 Historial",
     "💾 Guardar / Cargar"
 ])
@@ -142,7 +140,7 @@ with tab_juego:
         lvl_loc = PESO_NIVEL.get(current_standings[equipo_local]["Liga"], 3)
         lvl_vis = PESO_NIVEL.get(current_standings[equipo_visita]["Liga"], 3)
 
-        # 1. Registro Real para la Tabla
+        # Registro Real Directo
         current_standings[equipo_local]["PJ"] += 1
         current_standings[equipo_local]["GF"] += goles_local
         current_standings[equipo_local]["GA"] += goles_visita
@@ -151,28 +149,6 @@ with tab_juego:
         current_standings[equipo_visita]["GF"] += goles_visita
         current_standings[equipo_visita]["GA"] += goles_local
 
-        # 2. Control de Goleadas (Tope estadístico de +3 goles máximo para el motor de calculo)
-        diff_goles = abs(goles_local - goles_visita)
-        if diff_goles >= 4:
-            # Es una goleada abultada / disbalance
-            if goles_local > goles_visita:
-                gf_loc_adj = goles_visita + 3
-                gf_vis_adj = goles_visita
-                current_standings[equipo_local]["Goleadas_Registradas"].append(f"Goleó {goles_local}-{goles_visita} a {equipo_visita}")
-            else:
-                gf_vis_adj = goles_local + 3
-                gf_loc_adj = goles_local
-                current_standings[equipo_visita]["Goleadas_Registradas"].append(f"Goleó {goles_visita}-{goles_local} a {equipo_local}")
-        else:
-            gf_loc_adj = goles_local
-            gf_vis_adj = goles_visita
-
-        current_standings[equipo_local]["GF_Ajustados"] += gf_loc_adj
-        current_standings[equipo_local]["GA_Ajustados"] += gf_vis_adj
-        current_standings[equipo_visita]["GF_Ajustados"] += gf_vis_adj
-        current_standings[equipo_visita]["GA_Ajustados"] += gf_loc_adj
-
-        # 3. Rachas y Sufrimiento
         if goles_local > goles_visita:
             current_standings[equipo_local]["G"] += 1
             current_standings[equipo_local]["Pts"] += 3
@@ -233,9 +209,9 @@ with tab_tabla:
     df_standings.index += 1
     st.dataframe(df_standings, use_container_width=True)
 
-# --- PESTAÑA 3: PRONÓSTICO DIRECTO CON SUAVIZADO ---
+# --- PESTAÑA 3: PRONÓSTICO Y MARCADORES EXACTOS ---
 with tab_analisis:
-    st.markdown("### 🔬 Pronóstico Calculado Directo de la Tabla")
+    st.markdown("### 🔬 Pronóstico Directo y Marcadores Exactos")
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         pred_local = st.selectbox("Selecciona Local", lista_equipos, key="p_loc")
@@ -246,11 +222,11 @@ with tab_analisis:
         st_l = current_standings[pred_local]
         st_v = current_standings[pred_visita]
         
-        # Usamos los goles suavizados (Sin distorsión de goleadas abultadas)
-        prom_gf_l = (st_l["GF_Ajustados"] / st_l["PJ"]) if st_l["PJ"] > 0 else {"Top 1": 2.2, "Top 2": 1.7, "Media / Alta": 1.4, "Media": 1.1, "Menor": 0.8}.get(st_l["Liga"], 1.2)
-        prom_ga_l = (st_l["GA_Ajustados"] / st_l["PJ"]) if st_l["PJ"] > 0 else 1.0
-        prom_gf_v = (st_v["GF_Ajustados"] / st_v["PJ"]) if st_v["PJ"] > 0 else {"Top 1": 2.0, "Top 2": 1.5, "Media / Alta": 1.2, "Media": 1.0, "Menor": 0.7}.get(st_v["Liga"], 1.0)
-        prom_ga_v = (st_v["GA_Ajustados"] / st_v["PJ"]) if st_v["PJ"] > 0 else 1.2
+        # Promedios de goles directos (sin tocar ni alterar nada)
+        prom_gf_l = (st_l["GF"] / st_l["PJ"]) if st_l["PJ"] > 0 else {"Top 1": 2.2, "Top 2": 1.7, "Media / Alta": 1.4, "Media": 1.1, "Menor": 0.8}.get(st_l["Liga"], 1.2)
+        prom_ga_l = (st_l["GA"] / st_l["PJ"]) if st_l["PJ"] > 0 else 1.0
+        prom_gf_v = (st_v["GF"] / st_v["PJ"]) if st_v["PJ"] > 0 else {"Top 1": 2.0, "Top 2": 1.5, "Media / Alta": 1.2, "Media": 1.0, "Menor": 0.7}.get(st_v["Liga"], 1.0)
+        prom_ga_v = (st_v["GA"] / st_v["PJ"]) if st_v["PJ"] > 0 else 1.2
 
         lambda_local = max(0.4, (prom_gf_l + prom_ga_v) / 2.0)
         lambda_visita = max(0.3, (prom_gf_v + prom_ga_l) / 2.0)
@@ -283,22 +259,9 @@ with tab_analisis:
         p_over25 = sum(matriz_prob[i, j] for i in range(max_goles) for j in range(max_goles) if (i + j) > 2.5) * 100
 
         st.markdown("---")
-        
-        # ALERTAS DE DISBALANCE / GOLEADA ATÍPICA
-        if len(st_l["Goleadas_Registradas"]) > 0 or len(st_v["Goleadas_Registradas"]) > 0:
-            st.markdown("<div class='warning-box'>", unsafe_allow_html=True)
-            st.markdown("⚠️ **ALERTA DE DISBALANCE / GOLEADA ATÍPICA DETECTADA**")
-            if len(st_l["Goleadas_Registradas"]) > 0:
-                for g in st_l["Goleadas_Registradas"]:
-                    st.write(f"  └─ 📌 **{pred_local}:** {g} (El motor ajustó el promedio para no inflar los porcentajes).")
-            if len(st_v["Goleadas_Registradas"]) > 0:
-                for g in st_v["Goleadas_Registradas"]:
-                    st.write(f"  └─ 📌 **{pred_visita}:** {g} (El motor ajustó el promedio para no inflar los porcentajes).")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        st.subheader("📌 Promedios de Tabla Utilizados")
-        st.info(f"🏠 **{pred_local}:** Prom. Anotado Suavizado: **{prom_gf_l:.2f}** | Encajado: **{prom_ga_l:.2f}**")
-        st.info(f"✈️ **{pred_visita}:** Prom. Anotado Suavizado: **{prom_gf_v:.2f}** | Encajado: **{prom_ga_v:.2f}**")
+        st.subheader("📌 Promedios Actuales de Tabla")
+        st.info(f"🏠 **{pred_local}:** Anotado: **{prom_gf_l:.2f}** | Encajado: **{prom_ga_l:.2f}**")
+        st.info(f"✈️ **{pred_visita}:** Anotado: **{prom_gf_v:.2f}** | Encajado: **{prom_ga_v:.2f}**")
 
         st.markdown("### 📊 Porcentajes del Partido")
         res_c1, res_c2, res_c3 = st.columns(3)
@@ -309,6 +272,25 @@ with tab_analisis:
         res_k1, res_k2 = st.columns(2)
         with res_k1: st.markdown(f"<div class='metric-card' style='margin-top:10px;'><h4>Ambos Anotan</h4><h3>{p_btts:.1f}%</h3></div>", unsafe_allow_html=True)
         with res_k2: st.markdown(f"<div class='metric-card' style='margin-top:10px;'><h4>Más de 2.5 Goles</h4><h3>{p_over25:.1f}%</h3></div>", unsafe_allow_html=True)
+
+        # --- TABLA DE MARCADORES EXACTOS MÁS PROBABLES ---
+        st.markdown("---")
+        st.markdown("### 🎯 Top Marcadores Exactos Más Probables")
+        
+        marcadores_lista = []
+        for i in range(6):
+            for j in range(6):
+                prob = matriz_prob[i, j] * 100
+                marcadores_lista.append({
+                    "Marcador": f"{pred_local} {i} - {j} {pred_visita}",
+                    "Probabilidad": prob
+                })
+        
+        df_marcadores = pd.DataFrame(marcadores_lista).sort_values(by="Probabilidad", ascending=False).head(8).reset_index(drop=True)
+        df_marcadores.index += 1
+        df_marcadores["Probabilidad"] = df_marcadores["Probabilidad"].map(lambda x: f"{x:.2f}%")
+        
+        st.dataframe(df_marcadores, use_container_width=True)
 
 # --- PESTAÑA 4: HISTORIAL ---
 with tab_historial:
@@ -353,4 +335,3 @@ with tab_respaldo:
             st.success("✅ ¡Tabla restaurada con éxito!")
         except Exception as e:
             st.error("❌ El archivo no es válido.")
-
