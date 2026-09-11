@@ -210,7 +210,7 @@ with tab_tabla:
     df_standings.index += 1
     st.dataframe(df_standings, use_container_width=True)
 
-# --- PESTAÑA 3: PRONÓSTICO CON MENSAJES DIRECTOS ---
+# --- PESTAÑA 3: PRONÓSTICO CON LECTURA Y MENSAJES SIEMPRE VISIBLES ---
 with tab_analisis:
     st.markdown("### 🔬 Pronóstico, Lectura en Vivo y Marcadores")
     col_p1, col_p2 = st.columns(2)
@@ -223,11 +223,23 @@ with tab_analisis:
         st_l = current_standings[pred_local]
         st_v = current_standings[pred_visita]
         
-        # Promedios de goles directos sin modificar nada
-        prom_gf_l = (st_l["GF"] / st_l["PJ"]) if st_l["PJ"] > 0 else {"Top 1": 2.2, "Top 2": 1.7, "Media / Alta": 1.4, "Media": 1.1, "Menor": 0.8}.get(st_l["Liga"], 1.2)
-        prom_ga_l = (st_l["GA"] / st_l["PJ"]) if st_l["PJ"] > 0 else 1.0
-        prom_gf_v = (st_v["GF"] / st_v["PJ"]) if st_v["PJ"] > 0 else {"Top 1": 2.0, "Top 2": 1.5, "Media / Alta": 1.2, "Media": 1.0, "Menor": 0.7}.get(st_v["Liga"], 1.0)
-        prom_ga_v = (st_v["GA"] / st_v["PJ"]) if st_v["PJ"] > 0 else 1.2
+        pj_l = st_l["PJ"]
+        pj_v = st_v["PJ"]
+
+        # Si aún no hay partidos jugados, asignamos según el perfil técnico del equipo
+        if pj_l > 0:
+            prom_gf_l = st_l["GF"] / pj_l
+            prom_ga_l = st_l["GA"] / pj_l
+        else:
+            prom_gf_l = {"Top 1": 2.2, "Top 2": 1.7, "Media / Alta": 1.4, "Media": 1.1, "Menor": 0.8}.get(st_l["Liga"], 1.2)
+            prom_ga_l = {"Top 1": 0.8, "Top 2": 1.0, "Media / Alta": 1.2, "Media": 1.4, "Menor": 1.8}.get(st_l["Liga"], 1.2)
+
+        if pj_v > 0:
+            prom_gf_v = st_v["GF"] / pj_v
+            prom_ga_v = st_v["GA"] / pj_v
+        else:
+            prom_gf_v = {"Top 1": 2.0, "Top 2": 1.5, "Media / Alta": 1.2, "Media": 1.0, "Menor": 0.7}.get(st_v["Liga"], 1.0)
+            prom_ga_v = {"Top 1": 0.9, "Top 2": 1.1, "Media / Alta": 1.3, "Media": 1.5, "Menor": 1.9}.get(st_v["Liga"], 1.2)
 
         lambda_local = max(0.4, (prom_gf_l + prom_ga_v) / 2.0)
         lambda_visita = max(0.3, (prom_gf_v + prom_ga_l) / 2.0)
@@ -262,40 +274,53 @@ with tab_analisis:
         st.markdown("---")
         
         # --- GENERADOR DE MENSAJES Y LECTURA CON VIDA ---
-        st.markdown("### 🗣️ Mensaje y Lectura Claro del Partido")
-        
-        # Mensajes de Fuerza
-        if p_local >= 58.0:
-            st.markdown(f"<div class='fuerza-box'>💪 **VIENE CON FUERZA DE LOCAL:** **{pred_local}** marca una clara ventaja estadística. Sus números de ataque y los goles encajados por {pred_visita} sugieren que va a dominar el partido de principio a fin.</div>", unsafe_allow_html=True)
-        elif p_visita >= 55.0:
-            st.markdown(f"<div class='fuerza-box'>🚀 **VIENE CON FUERZA DE VISITANTE:** **{pred_visita}** sobrepasa el nivel del local en los modelos. Tienen toda la tendencia a imponer su jerarquía fuera de casa.</div>", unsafe_allow_html=True)
-        elif abs(p_local - p_visita) <= 8.0:
-            st.markdown(f"<div class='mensaje-box'>⚖️ **CHOQUE TRABADO Y PAREJO:** Ninguno logra sacarse una ventaja clara. Las probabilidades están muy apretadas y el margen de error será mínimo. Ideal para cubrir empates o hándicaps.</div>", unsafe_allow_html=True)
+        st.markdown("### 🗣️ Lectura y Diagnóstico del Partido")
 
-        # Mensajes de Ambos Marcan (BTTS)
-        if p_btts >= 62.0:
-            st.markdown(f"<div class='btts-box'>🔥 **AMBOS MARCAN CALIENTE ({p_btts:.1f}%):** Hay una tendencia altísima a que los dos equipos anoten gol. Tanto **{pred_local}** como **{pred_visita}** vienen generando peligro constante pero concediendo en defensa.</div>", unsafe_allow_html=True)
-        elif p_btts <= 42.0:
-            st.markdown(f"<div class='mensaje-box'>🛡️ **AMBOS MARCAN FRÍO ({p_btts:.1f}%):** Poca probabilidad de goles por ambos lados. Las estadísticas sugieren que al menos uno mantendrá el arco en cero o se impondrá un marcador corto.</div>", unsafe_allow_html=True)
+        # 1. MENSAJE BASE SIEMPRE PRESENTE
+        if pj_l == 0 and pj_v == 0:
+            st.markdown(
+                f"<div class='mensaje-box'>📌 **ANÁLISIS INICIAL (SIN REGISTRO EN TABLA):** "
+                f"Este pronóstico se basa en el perfil base de los equipos (**{pred_local}** [{st_l['Liga']}] vs **{pred_visita}** [{st_v['Liga']}]). "
+                f"A medida que cargues resultados en la pestaña 'Registrar Partido', este dictamen se irá afinando automáticamente.</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f"<div class='mensaje-box'>📊 **LECTURA BASADA EN TABLA VIVA:** "
+                f"Diagnóstico generado tras analizar **{pj_l}** partidos de **{pred_local}** y **{pj_v}** partidos de **{pred_visita}**.</div>",
+                unsafe_allow_html=True
+            )
 
-        # Mensajes de Goles (Over / Under)
-        if p_over25 >= 60.0:
-            st.markdown(f"<div class='btts-box'>⚽ **TENDENCIA A GOLEADA / MARCADOR ABIERTO:** Con un Over 2.5 en **{p_over25:.1f}%**, las tablas vivas marcan un partido de ritmo abierto con alta expectativa de varios goles.</div>", unsafe_allow_html=True)
-        elif p_over25 <= 38.0:
-            st.markdown(f"<div class='mensaje-box'>🔒 **PARTIDO DE POCOS ESPACIOS:** La expectativa de goles combinada es baja. Marcador cerrado proyectado (tipo 1-0, 0-0, 0-1).</div>", unsafe_allow_html=True)
+        # 2. MENSAJES DE FUERZA DE LOCAL / VISITANTE O EQUILIBRIO
+        if p_local >= 55.0:
+            st.markdown(f"<div class='fuerza-box'>💪 **VIENE CON FUERZA DE LOCAL:** **{pred_local}** marca una clara ventaja estadística. La proyección de goles favorece una victoria cómoda de su parte.</div>", unsafe_allow_html=True)
+        elif p_visita >= 52.0:
+            st.markdown(f"<div class='fuerza-box'>🚀 **VIENE CON FUERZA DE VISITANTE:** **{pred_visita}** se muestra superior según el modelo. Tienen alta probabilidad de imponerse fuera de casa.</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='mensaje-box'>⚖️ **PARTIDO APRETADO / PAREJO:** Ninguno saca una diferencia abrumadora. Las probabilidades están repartidas y hay buen margen para cubrir empates o hándicaps.</div>", unsafe_allow_html=True)
 
-        # Sufrimiento previo si aplica
+        # 3. MENSAJES DE AMBOS MARCAN (BTTS)
+        if p_btts >= 55.0:
+            st.markdown(f"<div class='btts-box'>🔥 **AMBOS MARCAN CALIENTE ({p_btts:.1f}%):** Tendencia marcada a que los dos anoten. Se proyecta un duelo con oportunidades en ambas porterías.</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='mensaje-box'>🛡️ **AMBOS MARCAN RESERVADO ({p_btts:.1f}%):** Tendencia moderada/baja a gol mutuo. Hay probabilidad de que alguno mantenga su portería a cero.</div>", unsafe_allow_html=True)
+
+        # 4. MENSAJE DE OVER 2.5
+        if p_over25 >= 55.0:
+            st.markdown(f"<div class='btts-box'>⚽ **LÍNEA DE GOLES ABIERTA:** Alta posibilidad de ver un partido de 3 o más goles total (Over 2.5 en **{p_over25:.1f}%**).</div>", unsafe_allow_html=True)
+
+        # 5. ALERTAS DE PARTIDOS SUFRIDOS
         if len(st_l["Partidos_Sufridos"]) > 0:
             for msj in st_l["Partidos_Sufridos"][-2:]:
-                st.markdown(f"<div class='mensaje-box'>⚠️ **OJO CON {pred_local.upper()}:** En partidos recientes {msj}. Ha estado apretado.</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='mensaje-box'>⚠️ **OJO CON {pred_local.upper()}:** En la tabla reciente {msj}.</div>", unsafe_allow_html=True)
         if len(st_v["Partidos_Sufridos"]) > 0:
             for msj in st_v["Partidos_Sufridos"][-2:]:
-                st.markdown(f"<div class='mensaje-box'>⚠️ **OJO CON {pred_visita.upper()}:** En partidos recientes {msj}. Ha estado apretado.</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='mensaje-box'>⚠️ **OJO CON {pred_visita.upper()}:** En la tabla reciente {msj}.</div>", unsafe_allow_html=True)
 
         st.markdown("---")
-        st.subheader("📌 Promedios Actuales de Tabla")
-        st.info(f"🏠 **{pred_local}:** Anotado: **{prom_gf_l:.2f}** | Encajado: **{prom_ga_l:.2f}**")
-        st.info(f"✈️ **{pred_visita}:** Anotado: **{prom_gf_v:.2f}** | Encajado: **{prom_ga_v:.2f}**")
+        st.subheader("📌 Promedios de Goles Aplicados")
+        st.info(f"🏠 **{pred_local}:** Anotado proyectado: **{prom_gf_l:.2f}** | Encajado proyectado: **{prom_ga_l:.2f}**")
+        st.info(f"✈️ **{pred_visita}:** Anotado proyectado: **{prom_gf_v:.2f}** | Encajado proyectado: **{prom_ga_v:.2f}**")
 
         st.markdown("### 📊 Porcentajes del Partido")
         res_c1, res_c2, res_c3 = st.columns(3)
@@ -343,7 +368,7 @@ with tab_respaldo:
         "standings_Champions": st.session_state["standings_Champions"],
         "standings_Europa": st.session_state["standings_Europa"],
         "standings_Conference": st.session_state["standings_Conference"],
-        "historial_partidos": st.session_state["historial_partidos"]
+        "historial_partidos": st.session_state.historial_partidos
     }
     json_bytes = json.dumps(datos_actuales, ensure_ascii=False, indent=2).encode('utf-8')
     
