@@ -1,6 +1,7 @@
-import streamlit as st
+Import streamlit as st
 import pandas as pd
 import numpy as np
+import math
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -24,6 +25,13 @@ st.markdown("""
         border: 1px solid #30363d;
         margin-bottom: 20px;
     }
+    .metric-card {
+        background-color: #21262d;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        text-align: center;
+    }
     .analisis-box {
         background-color: #1f242d;
         padding: 20px;
@@ -37,7 +45,7 @@ st.markdown("""
 
 # Título Principal
 st.markdown("<h2 style='text-align: center; color: #58a6ff;'>🇪🇺 ZOHAN PRONOSTIC - MOTOR UEFA PRO MAX</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #8b949e;'>Simulación avanzada con Monte Carlo (3,000 reps), Memoria Inteligente H2H y Analista Táctico.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #8b949e;'>Simulación avanzada con Monte Carlo (3,000 reps), Historial de Partidos, Resultados Exactos y Análisis Táctico.</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 # --- 1. DICCIONARIOS DE EQUIPOS OFICIALES (36 POR TORNEO) ---
@@ -85,8 +93,9 @@ EQUIPOS_CONFERENCE = {
 
 # --- 2. INICIALIZAR MEMORIA DE SESIÓN ---
 if 'torneo_actual' not in st.session_state:
-    st.session_state.torneo_actual = "Champions"
+    st.session_state.torneo_actual = "UEFA Champions League"
 
+# Diccionarios separados por torneo en session_state para no perder datos al cambiar
 for torneo_key, dict_eq in [("Champions", EQUIPOS_CHAMPIONS), ("Europa", EQUIPOS_EUROPA), ("Conference", EQUIPOS_CONFERENCE)]:
     key_name = f"standings_{torneo_key}"
     if key_name not in st.session_state:
@@ -100,58 +109,60 @@ for torneo_key, dict_eq in [("Champions", EQUIPOS_CHAMPIONS), ("Europa", EQUIPOS
 if 'historial_partidos' not in st.session_state:
     st.session_state.historial_partidos = []
 
-# --- 3. BOTONES DE NAVEGACIÓN HORIZONTALES (ESTILO MÓVIL) ---
-col_b1, col_b2, col_b3 = st.columns(3)
-with col_b1:
-    if st.button("🌟 Champions", use_container_width=True):
-        st.session_state.torneo_actual = "Champions"
-with col_b2:
-    if st.button("🥈 Europa", use_container_width=True):
-        st.session_state.torneo_actual = "Europa"
-with col_b3:
-    if st.button("🥉 Conference", use_container_width=True):
-        st.session_state.torneo_actual = "Conference"
+# --- 3. SELECTOR DE TORNEO ---
+st.markdown("### 🏆 Selección de Competición UEFA")
+col_t1, col_t2, col_t3 = st.columns(3)
 
-if st.session_state.torneo_actual == "Champions":
-    nombre_torneo_completo = "UEFA Champions League"
+with col_t1:
+    if st.button("🌟 Champions League", use_container_width=True):
+        st.session_state.torneo_actual = "UEFA Champions League"
+with col_t2:
+    if st.button("🥈 Europa League", use_container_width=True):
+        st.session_state.torneo_actual = "UEFA Europa League"
+with col_t3:
+    if st.button("🥉 Conference League", use_container_width=True):
+        st.session_state.torneo_actual = "UEFA Conference League"
+
+st.info(Torneo Activo: **{st.session_state.torneo_actual}**)
+
+# Mapear diccionario actual
+if st.session_state.torneo_actual == "UEFA Champions League":
     dic_equipos = EQUIPOS_CHAMPIONS
     standings_key = "standings_Champions"
-elif st.session_state.torneo_actual == "Europa":
-    nombre_torneo_completo = "UEFA Europa League"
+elif st.session_state.torneo_actual == "UEFA Europa League":
     dic_equipos = EQUIPOS_EUROPA
     standings_key = "standings_Europa"
 else:
-    nombre_torneo_completo = "UEFA Conference League"
     dic_equipos = EQUIPOS_CONFERENCE
     standings_key = "standings_Conference"
 
 current_standings = st.session_state[standings_key]
 
-st.markdown(f"<p style='text-align: center; color: #58a6ff; font-weight: bold;'>Competición Activa: {nombre_torneo_completo}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 4. REGISTRO DE PARTIDOS ---
-st.markdown("### 📝 Registrar Partido de la Jornada")
+# --- 4. SECCIÓN DE REGISTRO DE PARTIDOS (TABLA DE POSICIONES) ---
+st.markdown("### 📝 Registrar Partido de la Jornada (Actualiza la Tabla Real)")
 col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns([2, 1, 1, 2, 1])
 
 lista_nombres_eq = sorted(list(dic_equipos.keys()))
 
 with col_p1:
-    eq_local_reg = st.selectbox("Local", lista_nombres_eq, key="reg_local")
+    eq_local_reg = st.selectbox("Equipo Local", lista_nombres_eq, key="reg_local")
 with col_p2:
-    goles_local_reg = st.number_input("GL", 0, 20, 0, key="reg_gl")
+    goles_local_reg = st.number_input("Goles Local", 0, 20, 0, key="reg_gl")
 with col_p3:
-    goles_vis_reg = st.number_input("GV", 0, 20, 0, key="reg_gv")
+    goles_vis_reg = st.number_input("Goles Visita", 0, 20, 0, key="reg_gv")
 with col_p4:
-    eq_vis_reg = st.selectbox("Visita", lista_nombres_eq, index=1 if len(lista_nombres_eq) > 1 else 0, key="reg_vis")
+    eq_vis_reg = st.selectbox("Equipo Visitante", lista_nombres_eq, index=1 if len(lista_nombres_eq) > 1 else 0, key="reg_vis")
 with col_p5:
     st.markdown("<br>", unsafe_allow_html=True)
     registrar_btn = st.button("💾 Guardar", use_container_width=True)
 
 if registrar_btn:
     if eq_local_reg == eq_vis_reg:
-        st.error("⚠️ El local y visita deben ser distintos.")
+        st.error("⚠️ El equipo local y visitante no pueden ser el mismo.")
     else:
+        # Actualizar estadísticas del Local
         current_standings[eq_local_reg]["PJ"] += 1
         current_standings[eq_local_reg]["Casa_PJ"] += 1
         current_standings[eq_local_reg]["GF"] += goles_local_reg
@@ -159,6 +170,7 @@ if registrar_btn:
         current_standings[eq_local_reg]["GA"] += goles_vis_reg
         current_standings[eq_local_reg]["Casa_GA"] += goles_vis_reg
 
+        # Actualizar estadísticas del Visitante
         current_standings[eq_vis_reg]["PJ"] += 1
         current_standings[eq_vis_reg]["Visita_PJ"] += 1
         current_standings[eq_vis_reg]["GF"] += goles_vis_reg
@@ -180,19 +192,20 @@ if registrar_btn:
             current_standings[eq_vis_reg]["E"] += 1
             current_standings[eq_vis_reg]["Pts"] += 1
 
+        # Guardar en historial general
         st.session_state.historial_partidos.append({
-            "Torneo": nombre_torneo_completo,
+            "Torneo": st.session_state.torneo_actual,
             "Local": eq_local_reg,
             "Goles_L": goles_local_reg,
             "Goles_V": goles_vis_reg,
             "Visita": eq_vis_reg
         })
-        st.success(f"✅ Registrado: {eq_local_reg} {goles_local_reg} - {goles_vis_reg} {eq_vis_reg}")
+        st.success(f"✅ ¡Partido registrado con éxito! {eq_local_reg} {goles_local_reg} - {goles_vis_reg} {eq_vis_reg}")
 
 st.markdown("---")
 
-# --- 5. TABLA DE POSICIONES ---
-st.markdown(f"### 📊 Tabla de Posiciones - {nombre_torneo_completo}")
+# --- 5. VISUALIZAR TABLA DE POSICIONES ACTUALIZADA ---
+st.markdown(f"### 📊 Tabla de Posiciones Actualizada - {st.session_state.torneo_actual}")
 
 tabla_data = []
 for eq, stats in current_standings.items():
@@ -218,59 +231,47 @@ st.dataframe(df_tabla, use_container_width=True)
 
 st.markdown("---")
 
-# --- 6. MEMORIA H2H ---
-def obtener_memoria_historica(eq_local, eq_visita, historial_partidos):
-    if not historial_partidos:
-        return "🧠 **Memoria Inteligente:** Sin duelos previos en esta sesión."
-    
-    duelos = [
-        p for p in historial_partidos 
-        if p['Torneo'] == nombre_torneo_completo and 
-           ((p['Local'] == eq_local and p['Visita'] == eq_visita) or 
-            (p['Local'] == eq_visita and p['Visita'] == eq_local))
-    ]
-    
-    if duelos:
-        u = duelos[-1]
-        ganador = u['Local'] if u['Goles_L'] > u['Goles_V'] else (u['Visita'] if u['Goles_V'] > u['Goles_L'] else "Empate")
-        return f"🧠 **Memoria H2H:** Último antecedente directo: **{u['Local']} {u['Goles_L']} - {u['Goles_V']} {u['Visita']}** (Ganador: {ganador})."
-    
-    return "🧠 **Memoria Inteligente:** Equipos con inercia competitiva activa en la jornada."
-
-# --- 7. SIMULACIÓN MONTE CARLO ---
-st.markdown("### 🔬 Simulación y Pronóstico (Monte Carlo x 3,000)")
+# --- 6. MOTOR DE PRONÓSTICO Y SIMULACIÓN MONTE CARLO CRUZADO CON TABLA ---
+st.markdown("### 🔬 Simulación y Pronóstico Avanzado (Monte Carlo x 3,000)")
 
 col_s1, col_s2 = st.columns(2)
 with col_s1:
-    eq_sim_local = st.selectbox("Local a Simular", lista_nombres_eq, key="sim_l")
+    eq_sim_local = st.selectbox("Seleccionar Local para Simular", lista_nombres_eq, key="sim_l")
 with col_s2:
-    eq_sim_vis = st.selectbox("Visita a Simular", lista_nombres_eq, index=1 if len(lista_nombres_eq) > 1 else 0, key="sim_v")
+    eq_sim_vis = st.selectbox("Seleccionar Visitante para Simular", lista_nombres_eq, index=1 if len(lista_nombres_eq) > 1 else 0, key="sim_v")
 
-if st.button("🚀 EJECUTAR MONTE CARLO", type="primary", use_container_width=True):
+if st.button("🚀 EJECUTAR MOTOR MONTE CARLO (CON DATOS DE TABLA)", type="primary", use_container_width=True):
     if eq_sim_local == eq_sim_vis:
-        st.error("⚠️ Elige equipos distintos.")
+        st.error("⚠️ Elige equipos distintos para la simulación.")
     else:
+        # Extraer datos reales de la tabla acumulada
         stats_l = current_standings[eq_sim_local]
         stats_v = current_standings[eq_sim_vis]
 
+        # Cálculo de medias ofensivas y defensivas basadas en la tabla real
         pj_l_casa = max(1, stats_l["Casa_PJ"])
         pj_v_vis = max(1, stats_v["Visita_PJ"])
         pj_l_tot = max(1, stats_l["PJ"])
         pj_v_tot = max(1, stats_v["PJ"])
 
+        # Promedio ofensivo en casa para el local, defensivo general para el visita
         gf_casa_l = stats_l["Casa_GF"] / pj_l_casa
-        ga_vis_v = stats_v["Visita_GA"] / pj_v_vis if stats_v["Visita_GA"] > 0 else (stats_v["GA"] / pj_l_tot)
+        ga_vis_v = stats_v["Visita_GA"] / pj_v_vis if stats_v["Visita_GA"] > 0 else (stats_v["GA"] / pj_v_tot)
 
+        # Promedio ofensivo de visita para el visitante, defensivo general en casa para el local
         gf_vis_v = stats_v["Visita_GF"] / pj_v_vis
-        ga_casa_l = stats_l["Casa_GA"] / pj_l_casa if stats_l["Casa_GA"] > 0 else (stats_l["GA"] / pj_v_tot)
+        ga_casa_l = stats_l["Casa_GA"] / pj_l_casa if stats_l["Casa_GA"] > 0 else (stats_l["GA"] / pj_l_tot)
 
+        # Si aún no hay partidos jugados en la tabla, usar una base estándar según su categoría
         if stats_l["PJ"] == 0 and stats_v["PJ"] == 0:
             lambda_l = 1.8 if stats_l["Liga"] in ["Top 1", "Top 2"] else 1.2
             lambda_v = 1.4 if stats_v["Liga"] in ["Top 1", "Top 2"] else 0.9
         else:
-            lambda_l = max(0.5, (gf_casa_l + ga_vis_v) / 2.0)
-            lambda_v = max(0.5, (gf_vis_v + ga_casa_l) / 2.0)
+            # xG cruzado usando los datos reales de la tabla
+            lambda_l = max(0.4, (gf_casa_l + ga_vis_v) / 2.0)
+            lambda_v = max(0.3, (gf_vis_v + ga_casa_l) / 2.0)
 
+        # Simulación de Monte Carlo (3,000 repeticiones) con Poisson
         simulaciones = 3000
         goles_sim_l = np.random.poisson(lambda_l, simulaciones)
         goles_sim_v = np.random.poisson(lambda_v, simulaciones)
@@ -287,19 +288,7 @@ if st.button("🚀 EJECUTAR MONTE CARLO", type="primary", use_container_width=Tr
         p_over = (overs / simulaciones) * 100
         p_btts = (btts / simulaciones) * 100
 
-        nota_memoria = obtener_memoria_historica(eq_sim_local, eq_sim_vis, st.session_state.historial_partidos)
-        xg_total = lambda_l + lambda_v
-
-        if abs(lambda_l - lambda_v) > 1.2:
-            fav = eq_sim_local if lambda_l > lambda_v else eq_sim_vis
-            texto_analisis = f"⚡ **Alerta de rodillo:** El **{fav}** llega con todo el poder ofensivo."
-        elif xg_total < 2.1:
-            texto_analisis = "🛡️ **¡Cerrojo táctico!** Choque defensivo de margen mínimo (Under)."
-        elif lambda_l > 1.4 and lambda_v > 1.4:
-            texto_analisis = "⚽ **¡Lluvia de goles!** Alto porcentaje de ambos marcan."
-        else:
-            texto_analisis = "⚖️ **¡Pronóstico reservado!** Paridad estadística total."
-
+        # Calcular top marcadores exactos
         conteo_marcadores = {}
         for gl, gv in zip(goles_sim_l, goles_sim_v):
             k = (int(gl), int(gv))
@@ -307,40 +296,34 @@ if st.button("🚀 EJECUTAR MONTE CARLO", type="primary", use_container_width=Tr
 
         top_5 = sorted(conteo_marcadores.items(), key=lambda x: x[1], reverse=True)[:5]
 
+        # Mostrar resultados con diseño limpio
         st.markdown(f"""
             <div class='card'>
-                <h4>🔬 Resultados Monte Carlo</h4>
-                <p><b>xG {eq_sim_local}:</b> <code>{lambda_l:.2f}</code> | <b>xG {eq_sim_vis}:</b> <code>{lambda_v:.2f}</code></p>
+                <h4>🔬 Resultados del Motor Monte Carlo (Basado en la Tabla Real)</h4>
+                <p><b>xG Estimado {eq_sim_local}:</b> <code>{lambda_l:.2f}</code> | <b>xG Estimado {eq_sim_vis}:</b> <code>{lambda_v:.2f}</code></p>
                 <hr style='border-color: #30363d;'>
-                <p>🏠 <b>Victoria {eq_sim_local}:</b> <b>{p_local:.1f}%</b></p>
-                <p>⚖️ <b>Empate:</b> <b>{p_empate:.1f}%</b></p>
-                <p>✈️ <b>Victoria {eq_sim_vis}:</b> <b>{p_vis:.1f}%</b></p>
+                <p>🏠 <b>Victoria {eq_sim_local}:</b> <b>{p_local:.1f}%</b> ➔ <i>{wins_l} de {simulaciones}</i></p>
+                <p>⚖️ <b>Empate:</b> <b>{p_empate:.1f}%</b> ➔ <i>{empates} de {simulaciones}</i></p>
+                <p>✈️ <b>Victoria {eq_sim_vis}:</b> <b>{p_vis:.1f}%</b> ➔ <i>{wins_v} de {simulaciones}</i></p>
                 <hr style='border-color: #30363d;'>
-                <p>⚽ <b>Más 2.5 Goles:</b> <b>{p_over:.1f}%</b> | 🎯 <b>BTTS:</b> <b>{p_btts:.1f}%</b></p>
-                <div class='analisis-box'>
-                    {texto_analisis}<br><br>{nota_memoria}
-                </div>
-                <p><b>🎯 Top 5 Marcadores Exactos:</b></p>
+                <p>⚽ <b>Más de 2.5 Goles:</b> <b>{p_over:.1f}%</b> | 🎯 <b>Ambos Marcan (BTTS):</b> <b>{p_btts:.1f}%</b></p>
+                <hr style='border-color: #30363d;'>
+                <p><b>🎯 Top 5 Marcadores Exactos Más Probables:</b></p>
                 <ul>
         """, unsafe_allow_html=True)
 
         for item in top_5:
-            m = item[0]
-            c = item[1]
-            prob = (c / simulaciones) * 100
-            st.markdown(f"<li><b>{m[0]} - {m[1]}</b> ➔ <b>{prob:.1f}%</b></li>", unsafe_allow_html=True)
+            marcador = item[0]
+            count = item[1]
+            prob = (count / simulaciones) * 100
+            st.markdown(f"<li><b>{marcador[0]} - {marcador[1]}</b> ➔ <b>{prob:.1f}%</b> <i>({count} simulaciones)</i></li>", unsafe_allow_html=True)
 
         st.markdown("</ul></div>", unsafe_allow_html=True)
-        st.success("¡Simulación completada con éxito!")
+        st.success("✨ ¡Simulación cruzada con la tabla de posiciones ejecutada con éxito!")
 
-# --- 8. HISTORIAL Y LIMPIEZA ---
+# --- 7. HISTORIAL DE PARTIDOS REGISTRADOS ---
 if len(st.session_state.historial_partidos) > 0:
     st.markdown("---")
-    st.markdown("### 📜 Historial de Partidos")
+    st.markdown("### 📜 Historial de Partidos Registrados")
     df_historial = pd.DataFrame(st.session_state.historial_partidos)
     st.dataframe(df_historial, use_container_width=True)
-
-    if st.button("🗑️ Consolidar Jornada y Limpiar Historial", type="secondary", use_container_width=True):
-        st.session_state.historial_partidos = []
-        st.success("¡Historial limpiado! Las tablas de posiciones se mantienen intactas.")
-        st.rerun()
