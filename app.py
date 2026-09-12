@@ -23,20 +23,11 @@ st.markdown("""
         border: 1px solid #30363D;
         text-align: center;
     }
-    .status-badge {
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-weight: bold;
-        font-size: 0.85em;
-    }
-    .status-green { background-color: #238636; color: white; }
-    .status-yellow { background-color: #9E6A03; color: white; }
-    .status-red { background-color: #DA3633; color: white; }
 </style>
 """, unsafe_allowed_syntax=True)
 
 # ==========================================
-# DICCIONARIOS OFICIALES DE EQUIPOS
+# DICCIONARIOS OFICIALES DE EQUIPOS (LISTA BLANCA ABSOLUTA)
 # ==========================================
 EQUIPOS_CHAMPIONS = {
     "Real Madrid": "Top 1", "Barcelona": "Top 1", "Atlético de Madrid": "Top 1", "Villarreal": "Top 1", "Real Betis": "Top 1",
@@ -84,7 +75,7 @@ EQUIPOS_CONFERENCE = {
 }
 
 # ==========================================
-# FUNCIONES DE CONTROL DE ESTADO (SESSION STATE)
+# GESTIÓN DE ESTADO (SESSION STATE REFORZADA)
 # ==========================================
 if 'torneo_actual' not in st.session_state:
     st.session_state.torneo_actual = "Champions League"
@@ -97,6 +88,19 @@ def obtener_equipos_torneo(torneo):
     else:
         return EQUIPOS_CONFERENCE
 
+def purgar_equipo_invalido(nombre_torneo):
+    """Elimina quirúrgicamente cualquier equipo que no esté en la lista oficial."""
+    prefix = nombre_torneo.lower().replace(" ", "_")
+    equipos_validos = set(obtener_equipos_torneo(nombre_torneo).keys())
+    
+    key_tabla = f'{prefix}_tabla'
+    if key_tabla in st.session_state:
+        # Filtrar el diccionario directamente
+        st.session_state[key_tabla] = {
+            eq: stats for eq, stats in st.session_state[key_tabla].items()
+            if eq in equipos_validos
+        }
+
 def inicializar_torneo(nombre_torneo):
     prefix = nombre_torneo.lower().replace(" ", "_")
     equipos_dict = obtener_equipos_torneo(nombre_torneo)
@@ -105,30 +109,22 @@ def inicializar_torneo(nombre_torneo):
         st.session_state[f'{prefix}_partidos'] = []
     
     if f'{prefix}_tabla' not in st.session_state:
-        tabla_init = {}
-        for eq in equipos_dict.keys():
-            tabla_init[eq] = {
+        st.session_state[f'{prefix}_tabla'] = {}
+
+    # Asegurar que todos los equipos válidos existan en la tabla
+    for eq in equipos_dict.keys():
+        if eq not in st.session_state[f'{prefix}_tabla']:
+            st.session_state[f'{prefix}_tabla'][eq] = {
                 "PJ": 0, "PG": 0, "PE": 0, "PP": 0,
                 "GF": 0, "GC": 0, "DG": 0, "Pts": 0
             }
-        st.session_state[f'{prefix}_tabla'] = tabla_init
 
-def purgar_todos_los_torneos():
-    """Recorre la memoria actual y borra cualquier equipo fuera del diccionario oficial."""
-    for torneo in ["Champions League", "Europa League", "Conference League"]:
-        prefix = torneo.lower().replace(" ", "_")
-        equipos_validos = set(obtener_equipos_torneo(torneo).keys())
-        
-        if f'{prefix}_tabla' in st.session_state:
-            claves = list(st.session_state[f'{prefix}_tabla'].keys())
-            for eq in claves:
-                if eq not in equipos_validos:
-                    del st.session_state[f'{prefix}_tabla'][eq]
+    # Limpiar cualquier residuo de memoria
+    purgar_equipo_invalido(nombre_torneo)
 
-# Inicialización primaria y purga
+# Ejecutar inicialización y purga estricta para todos los torneos
 for torneo in ["Champions League", "Europa League", "Conference League"]:
     inicializar_torneo(torneo)
-purgar_todos_los_torneos()
 
 # ==========================================
 # MOTOR MATEMÁTICO (DIXON-COLES / POISSON)
@@ -198,6 +194,9 @@ torneo_sel = st.sidebar.selectbox(
 st.session_state.torneo_actual = torneo_sel
 prefix_act = torneo_sel.lower().replace(" ", "_")
 
+# Forzar purga al cambiar de menú
+purgar_equipo_invalido(torneo_sel)
+
 st.title(f"🏆 Pronosticador: {torneo_sel}")
 
 pestanas = st.tabs(["📊 Tabla de Posiciones", "⚽ Registrar Partido", "🔮 Pronóstico Dixon-Coles", "📈 Diagnósticos Avanzados", "💾 Respaldos (Móvil/PC)"])
@@ -207,9 +206,14 @@ pestanas = st.tabs(["📊 Tabla de Posiciones", "⚽ Registrar Partido", "🔮 P
 # ------------------------------------------
 with pestanas[0]:
     st.subheader(f"Tabla En Vivo - {torneo_sel}")
-    tabla_data = st.session_state[f'{prefix_act}_tabla']
     
-    df_tabla = pd.DataFrame.from_dict(tabla_data, orient='index')
+    # Obtener tabla y filtrar estrictamente contra los equipos del torneo activo
+    equipos_permitidos = set(obtener_equipos_torneo(torneo_sel).keys())
+    tabla_raw = st.session_state[f'{prefix_act}_tabla']
+    
+    tabla_filtrada = {k: v for k, v in tabla_raw.items() if k in equipos_permitidos}
+    
+    df_tabla = pd.DataFrame.from_dict(tabla_filtrada, orient='index')
     df_tabla = df_tabla.sort_values(by=["Pts", "DG", "GF"], ascending=False)
     
     st.dataframe(df_tabla.style.highlight_max(axis=0, subset=["Pts", "DG", "GF"], color="#1E3A8A"), use_container_width=True)
@@ -219,7 +223,7 @@ with pestanas[0]:
 # ------------------------------------------
 with pestanas[1]:
     st.subheader("Ingresar Resultado Oficial")
-    equipos_lista = list(obtener_equipos_torneo(torneo_sel).keys())
+    equipos_lista = sorted(list(obtener_equipos_torneo(torneo_sel).keys()))
     
     col1, col2 = st.columns(2)
     with col1:
@@ -260,7 +264,7 @@ with pestanas[1]:
 # ------------------------------------------
 with pestanas[2]:
     st.subheader("Calculadora de Probabilidades Poisson / Dixon-Coles")
-    equipos_lista = list(obtener_equipos_torneo(torneo_sel).keys())
+    equipos_lista = sorted(list(obtener_equipos_torneo(torneo_sel).keys()))
     
     c1, c2 = st.columns(2)
     with c1:
@@ -302,14 +306,15 @@ with pestanas[4]:
     st.subheader("Sistema de Respaldos Multiformato (.txt / .json)")
     st.info("Descarga o restaura la información de tus partidos sin bloqueos en navegadores móviles.")
     
-    datos_exportar = {
-        "champions_league_partidos": st.session_state.get('champions_league_partidos', []),
-        "champions_league_tabla": st.session_state.get('champions_league_tabla', {}),
-        "europa_league_partidos": st.session_state.get('europa_league_partidos', []),
-        "europa_league_tabla": st.session_state.get('europa_league_tabla', {}),
-        "conference_league_partidos": st.session_state.get('conference_league_partidos', []),
-        "conference_league_tabla": st.session_state.get('conference_league_tabla', {})
-    }
+    # Exportar solo datos filtrados y limpios
+    datos_exportar = {}
+    for t_nom in ["Champions League", "Europa League", "Conference League"]:
+        p_name = t_nom.lower().replace(" ", "_")
+        eq_permitidos = set(obtener_equipos_torneo(t_nom).keys())
+        
+        datos_exportar[f"{p_name}_partidos"] = st.session_state.get(f"{p_name}_partidos", [])
+        tabla_orig = st.session_state.get(f"{p_name}_tabla", {})
+        datos_exportar[f"{p_name}_tabla"] = {k: v for k, v in tabla_orig.items() if k in eq_permitidos}
     
     json_str = json.dumps(datos_exportar, indent=4, ensure_ascii=False)
     
@@ -333,7 +338,7 @@ with pestanas[4]:
     st.markdown("---")
     st.subheader("Restaurar Respaldo")
     
-    archivo_subido = st.file_uploader("Selecciona tu archivo de respaldo (.txt o .json):", type=["txt", "json"])
+    archivo_subido = st.file_uploader("Selecciona tu archivo de respaldo (.txt o .json):", type=["txt", "json"], key="uploader_respaldo")
     
     if archivo_subido is not None:
         try:
@@ -341,10 +346,12 @@ with pestanas[4]:
             for key, val in contenido.items():
                 st.session_state[key] = val
             
-            # PURGA INMEDIATA AL CARGAR EL ARCHIVO
-            purgar_todos_los_torneos()
-            
+            # Forzar purga inmediata en todos los torneos al cargar
+            for t_nom in ["Champions League", "Europa League", "Conference League"]:
+                purgar_equipo_invalido(t_nom)
+                
             st.success("¡Respaldo restaurado y purgado con éxito!")
             st.rerun()
         except Exception as e:
             st.error(f"Error al leer el archivo de respaldo: {e}")
+
