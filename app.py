@@ -36,7 +36,7 @@ st.markdown("""
 """, unsafe_allowed_syntax=True)
 
 # ==========================================
-# DICCIONARIOS OFICIALES DE EQUIPOS (CORREGIDOS)
+# DICCIONARIOS OFICIALES DE EQUIPOS (REUBICADOS CORRECTAMENTE)
 # ==========================================
 EQUIPOS_CHAMPIONS = {
     "Real Madrid": "Top 1", "Barcelona": "Top 1", "Atlético de Madrid": "Top 1", "Villarreal": "Top 1", "Real Betis": "Top 1",
@@ -113,9 +113,20 @@ def inicializar_torneo(nombre_torneo):
             }
         st.session_state[f'{prefix}_tabla'] = tabla_init
 
-inicializar_torneo("Champions League")
-inicializar_torneo("Europa League")
-inicializar_torneo("Conference League")
+def limpiar_equipos_obsoletos(nombre_torneo):
+    prefix = nombre_torneo.lower().replace(" ", "_")
+    equipos_validos = set(obtener_equipos_torneo(nombre_torneo).keys())
+    
+    if f'{prefix}_tabla' in st.session_state:
+        claves_existentes = list(st.session_state[f'{prefix}_tabla'].keys())
+        for eq in claves_existentes:
+            if eq not in equipos_validos:
+                del st.session_state[f'{prefix}_tabla'][eq]
+
+# Inicializar y Purgar Memoria de Todos los Torneos
+for torneo in ["Champions League", "Europa League", "Conference League"]:
+    inicializar_torneo(torneo)
+    limpiar_equipos_obsoletos(torneo)
 
 # ==========================================
 # MOTOR MATEMÁTICO (DIXON-COLES / POISSON)
@@ -195,6 +206,7 @@ pestanas = st.tabs(["📊 Tabla de Posiciones", "⚽ Registrar Partido", "🔮 P
 with pestanas[0]:
     st.subheader(f"Tabla En Vivo - {torneo_sel}")
     tabla_data = st.session_state[f'{prefix_act}_tabla']
+    
     df_tabla = pd.DataFrame.from_dict(tabla_data, orient='index')
     df_tabla = df_tabla.sort_values(by=["Pts", "DG", "GF"], ascending=False)
     
