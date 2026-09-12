@@ -27,7 +27,7 @@ st.markdown("""
 """, unsafe_allowed_syntax=True)
 
 # ==========================================
-# DICCIONARIOS OFICIALES DE EQUIPOS (LISTA BLANCA ABSOLUTA)
+# DICCIONARIOS OFICIALES DE EQUIPOS (LISTAS ESTRICTAS POR TORNEO)
 # ==========================================
 EQUIPOS_CHAMPIONS = {
     "Real Madrid": "Top 1", "Barcelona": "Top 1", "Atlético de Madrid": "Top 1", "Villarreal": "Top 1", "Real Betis": "Top 1",
@@ -75,7 +75,7 @@ EQUIPOS_CONFERENCE = {
 }
 
 # ==========================================
-# GESTIÓN DE ESTADO (SESSION STATE REFORZADA)
+# GESTIÓN DE ESTADO Y PURGA ESTRICTA DE NOMBRES
 # ==========================================
 if 'torneo_actual' not in st.session_state:
     st.session_state.torneo_actual = "Champions League"
@@ -88,17 +88,16 @@ def obtener_equipos_torneo(torneo):
     else:
         return EQUIPOS_CONFERENCE
 
-def purgar_equipo_invalido(nombre_torneo):
-    """Elimina quirúrgicamente cualquier equipo que no esté en la lista oficial."""
+def purgar_equipos_fuera_de_lugar(nombre_torneo):
+    """Filtra y remueve de session_state cualquier equipo que no pertenezca al torneo."""
     prefix = nombre_torneo.lower().replace(" ", "_")
-    equipos_validos = set(obtener_equipos_torneo(nombre_torneo).keys())
+    equipos_permitidos = set(obtener_equipos_torneo(nombre_torneo).keys())
     
     key_tabla = f'{prefix}_tabla'
     if key_tabla in st.session_state:
-        # Filtrar el diccionario directamente
         st.session_state[key_tabla] = {
             eq: stats for eq, stats in st.session_state[key_tabla].items()
-            if eq in equipos_validos
+            if eq in equipos_permitidos
         }
 
 def inicializar_torneo(nombre_torneo):
@@ -111,7 +110,6 @@ def inicializar_torneo(nombre_torneo):
     if f'{prefix}_tabla' not in st.session_state:
         st.session_state[f'{prefix}_tabla'] = {}
 
-    # Asegurar que todos los equipos válidos existan en la tabla
     for eq in equipos_dict.keys():
         if eq not in st.session_state[f'{prefix}_tabla']:
             st.session_state[f'{prefix}_tabla'][eq] = {
@@ -119,15 +117,13 @@ def inicializar_torneo(nombre_torneo):
                 "GF": 0, "GC": 0, "DG": 0, "Pts": 0
             }
 
-    # Limpiar cualquier residuo de memoria
-    purgar_equipo_invalido(nombre_torneo)
+    purgar_equipos_fuera_de_lugar(nombre_torneo)
 
-# Ejecutar inicialización y purga estricta para todos los torneos
 for torneo in ["Champions League", "Europa League", "Conference League"]:
     inicializar_torneo(torneo)
 
 # ==========================================
-# MOTOR MATEMÁTICO (DIXON-COLES / POISSON)
+# MOTOR MATEMÁTICO (DIXON-COLES Y POISSON - SIN CAMBIOS)
 # ==========================================
 def dixon_coles_adjustment(x, y, lambda_x, mu_y, rho=-0.13):
     if x == 0 and y == 0:
@@ -194,8 +190,8 @@ torneo_sel = st.sidebar.selectbox(
 st.session_state.torneo_actual = torneo_sel
 prefix_act = torneo_sel.lower().replace(" ", "_")
 
-# Forzar purga al cambiar de menú
-purgar_equipo_invalido(torneo_sel)
+# Forzar purga al navegar entre pestañas o selecciones
+purgar_equipos_fuera_de_lugar(torneo_sel)
 
 st.title(f"🏆 Pronosticador: {torneo_sel}")
 
@@ -207,11 +203,11 @@ pestanas = st.tabs(["📊 Tabla de Posiciones", "⚽ Registrar Partido", "🔮 P
 with pestanas[0]:
     st.subheader(f"Tabla En Vivo - {torneo_sel}")
     
-    # Obtener tabla y filtrar estrictamente contra los equipos del torneo activo
-    equipos_permitidos = set(obtener_equipos_torneo(torneo_sel).keys())
+    equipos_validos = set(obtener_equipos_torneo(torneo_sel).keys())
     tabla_raw = st.session_state[f'{prefix_act}_tabla']
     
-    tabla_filtrada = {k: v for k, v in tabla_raw.items() if k in equipos_permitidos}
+    # Filtrar estrictamente antes de renderizar la tabla
+    tabla_filtrada = {k: v for k, v in tabla_raw.items() if k in equipos_validos}
     
     df_tabla = pd.DataFrame.from_dict(tabla_filtrada, orient='index')
     df_tabla = df_tabla.sort_values(by=["Pts", "DG", "GF"], ascending=False)
@@ -306,7 +302,6 @@ with pestanas[4]:
     st.subheader("Sistema de Respaldos Multiformato (.txt / .json)")
     st.info("Descarga o restaura la información de tus partidos sin bloqueos en navegadores móviles.")
     
-    # Exportar solo datos filtrados y limpios
     datos_exportar = {}
     for t_nom in ["Champions League", "Europa League", "Conference League"]:
         p_name = t_nom.lower().replace(" ", "_")
@@ -346,12 +341,10 @@ with pestanas[4]:
             for key, val in contenido.items():
                 st.session_state[key] = val
             
-            # Forzar purga inmediata en todos los torneos al cargar
             for t_nom in ["Champions League", "Europa League", "Conference League"]:
-                purgar_equipo_invalido(t_nom)
+                purgar_equipos_fuera_de_lugar(t_nom)
                 
             st.success("¡Respaldo restaurado y purgado con éxito!")
             st.rerun()
         except Exception as e:
             st.error(f"Error al leer el archivo de respaldo: {e}")
-
