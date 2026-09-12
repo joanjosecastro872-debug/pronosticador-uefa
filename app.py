@@ -372,26 +372,50 @@ with tab_respaldo:
     }
     json_bytes = json.dumps(datos_actuales, ensure_ascii=False, indent=2).encode('utf-8')
     
-    st.download_button(
-        label="📥 Descargar Respaldo de la Tabla al Teléfono",
-        data=json_bytes,
-        file_name="respaldo_futbol_zohan.json",
-        mime="application/json",
-        use_container_width=True
-    )
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        st.download_button(
+            label="📥 Descargar (.json)",
+            data=json_bytes,
+            file_name="respaldo_futbol_zohan.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    with col_d2:
+        st.download_button(
+            label="📥 Descargar (.txt - Recomendado Móvil)",
+            data=json_bytes,
+            file_name="respaldo_futbol_zohan.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
     
     st.markdown("---")
     st.markdown("#### 📤 Restaurar la Tabla desde tu Teléfono")
-    archivo_subido = st.file_uploader("Selecciona tu archivo de respaldo (.json)", type=["json"])
+    
+    # Al incluir "txt" y "json", el navegador del teléfono ya no oculta los archivos en la carpeta
+    archivo_subido = st.file_uploader(
+        "Selecciona tu archivo de respaldo (.json o .txt)", 
+        type=["txt", "json"]
+    )
     
     if archivo_subido is not None:
         try:
-            datos_cargados = json.load(archivo_subido)
-            st.session_state["standings_Champions"] = datos_cargados["standings_Champions"]
-            st.session_state["standings_Europa"] = datos_cargados["standings_Europa"]
-            st.session_state["standings_Conference"] = datos_cargados["standings_Conference"]
-            st.session_state["historial_partidos"] = datos_cargados["historial_partidos"]
-            st.success("✅ ¡Tabla restaurada con éxito!")
+            contenido_bytes = archivo_subido.getvalue()
+            contenido_texto = contenido_bytes.decode("utf-8-sig", errors="ignore")
+            datos_cargados = json.loads(contenido_texto)
+            
+            if "standings_Champions" in datos_cargados:
+                st.session_state["standings_Champions"] = datos_cargados["standings_Champions"]
+                st.session_state["standings_Europa"] = datos_cargados["standings_Europa"]
+                st.session_state["standings_Conference"] = datos_cargados["standings_Conference"]
+                st.session_state["historial_partidos"] = datos_cargados.get("historial_partidos", [])
+                
+                st.success("✅ ¡Tabla y datos restaurados con éxito!")
+                st.rerun()
+            else:
+                st.error("❌ El archivo no contiene la estructura requerida del Búnker.")
+                
         except Exception as e:
-            st.error("❌ El archivo no es válido.")
+            st.error(f"❌ Error al procesar el archivo: {e}")
 
