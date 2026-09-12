@@ -1,421 +1,333 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy.stats import poisson
 import json
 
-# Configuración de la página
+# ==========================================
+# CONFIGURACIÓN INICIAL Y ESTILOS
+# ==========================================
 st.set_page_config(
-    page_title="Zohan Pronostic - Mobile Engine",
-    page_icon="⚽",
+    page_title="Pronosticador de Fútbol Profesional",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# Estilos CSS
 st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: #f0f6fc; }
-    .card { background-color: #161b22; padding: 20px; border-radius: 12px; border: 1px solid #30363d; margin-bottom: 20px; }
-    .metric-card { background-color: #21262d; padding: 15px; border-radius: 8px; border: 1px solid #30363d; text-align: center; }
-    .mensaje-box { background-color: #1f242d; padding: 15px; border-radius: 10px; border-left: 5px solid #58a6ff; margin-top: 10px; margin-bottom: 10px; font-size: 16px; }
-    .btts-box { background-color: #1b2820; padding: 15px; border-radius: 10px; border-left: 5px solid #3fb950; margin-top: 10px; margin-bottom: 10px; font-size: 16px; }
-    .fuerza-box { background-color: #2b1f1d; padding: 15px; border-radius: 10px; border-left: 5px solid #f85149; margin-top: 10px; margin-bottom: 10px; font-size: 16px; }
-    </style>
-""", unsafe_allow_html=True)
+<style>
+    .stApp { background-color: #0E1117; color: #FFFFFF; }
+    .metric-card {
+        background-color: #1E2640;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #30363D;
+        text-align: center;
+    }
+    .status-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 0.85em;
+    }
+    .status-green { background-color: #238636; color: white; }
+    .status-yellow { background-color: #9E6A03; color: white; }
+    .status-red { background-color: #DA3633; color: white; }
+</style>
+""", unsafe_allowed_syntax=True)
 
-# Título Principal
-st.markdown("<h2 style='text-align: center; color: #58a6ff;'>🇪🇺 ZOHAN PRONOSTIC - MOTOR CON LECTURA Y MENSAJES</h2>", unsafe_allow_html=True)
-st.markdown("---")
-
-# --- DICCIONARIOS DE EQUIPOS ---
+# ==========================================
+# DICCIONARIOS OFICIALES DE EQUIPOS (CORREGIDOS)
+# ==========================================
 EQUIPOS_CHAMPIONS = {
     "Real Madrid": "Top 1", "Barcelona": "Top 1", "Atlético de Madrid": "Top 1", "Villarreal": "Top 1", "Real Betis": "Top 1",
     "Manchester City": "Top 1", "Arsenal": "Top 1", "Liverpool": "Top 1", "Aston Villa": "Top 1", "Manchester United": "Top 1",
     "Bayern Múnich": "Top 1", "Borussia Dortmund": "Top 1", "VfB Stuttgart": "Top 1", "RB Leipzig": "Top 1",
     "Inter de Milán": "Top 1", "Napoli": "Top 1", "Roma": "Top 1", "Como 1907": "Top 1",
     "PSG": "Top 2", "Lille": "Top 2", "Lens": "Top 2",
-    "Feyenoord": "Top 2", "PSV Eindhoven": "Top 2", "Porto": "Top 2", "Sporting CP": "Top 2", "Benfica": "Top 2",
-    "Fenerbahçe": "Media / Alta", "Galatasaray": "Media / Alta", "Shakhtar Donetsk": "Media / Alta",
+    "Feyenoord": "Top 2", "PSV Eindhoven": "Top 2", "Porto": "Top 2", "Sporting CP": "Top 2",
+    "Galatasaray": "Media / Alta", "Fenerbahçe": "Media / Alta", "Shakhtar Donetsk": "Media / Alta",
     "Club Brujas": "Media / Alta", "Bodø/Glimt": "Media", "Slavia Praga": "Media",
-    "Slovan Bratislava": "Menor", "Sturm Graz": "Media", "LASK Linz": "Media",
+    "Slovan Bratislava": "Menor", "LASK Linz": "Media",
     "AEK Atenas": "Media", "Viking Stavanger": "Menor", "Sabah": "Menor"
 }
 
 EQUIPOS_EUROPA = {
-    "Crystal Palace": "Top 1", "Bournemouth": "Top 1", "Sunderland": "Top 1",
-    "AC Milan": "Top 1", "Juventus": "Top 1", "Real Sociedad": "Top 1",
-    "Celta de Vigo": "Top 1", "Bayer Leverkusen": "Top 1", "Hoffenheim": "Top 1",
-    "Olympique de Marsella": "Top 2", "Stade Rennais": "Top 2", "Olympique de Lyon": "Top 2",
-    "AZ Alkmaar": "Top 2", "NEC Negen": "Top 2", "Benfica (EL)": "Top 2", "Torreense": "Top 2",
-    "Anderlecht": "Media / Alta", "Union Saint-Gilloise": "Media / Alta", "Beşiktaş": "Media / Alta",
-    "Olympiacos": "Media / Alta", "OFI Creta": "Media", "Sparta Praga": "Media",
-    "Viktoria Plzeň": "Media", "Ferencváros": "Media", "Dinamo Zagreb": "Media / Alta",
-    "Red Bull Salzburg": "Media / Alta", "Sturm Graz (EL)": "Media", "Celtic": "Media / Alta",
-    "Estrella Roja": "Media / Alta", "Lech Poznań": "Media", "Jagiellonia": "Menor",
-    "Lillestrøm": "Media", "Omonia Nicosia": "Menor", "Hapoel Be'er Sheva": "Menor",
-    "Celje": "Menor", "Ararat-Armenia": "Menor"
+    "AC Milan": "Top 1", "Juventus": "Top 1",
+    "Bayer Leverkusen": "Top 1", "Hoffenheim": "Top 1",
+    "Olympique de Marsella": "Top 2", "Olympique de Lyon": "Top 2", "Stade Rennais": "Top 2",
+    "Real Sociedad": "Top 2", "Celta de Vigo": "Top 2",
+    "Crystal Palace": "Top 2", "Bournemouth": "Top 2", "Sunderland": "Media / Alta",
+    "AZ Alkmaar": "Media / Alta", "NEC Nijmegen": "Media",
+    "Benfica": "Top 2", "União Torreense": "Menor",
+    "Red Bull Salzburg": "Media / Alta", "Sturm Graz": "Media",
+    "Beşiktaş": "Media / Alta", "Ferencváros": "Media", "Lech Poznań": "Media",
+    "Anderlecht": "Media", "Viktoria Plzeň": "Media", "Sparta Praga": "Media",
+    "Celtic": "Media / Alta", "Dinamo Zagreb": "Media / Alta", "Olympiacos": "Media / Alta",
+    "Levski Sofia": "Menor", "OFI Creta": "Menor", "Jagiellonia Białystok": "Menor",
+    "AC Omonia Nicosia": "Menor", "Lillestrøm SK": "Menor", "FC Ararat-Armenia": "Menor",
+    "Hapoel Be'er Sheva": "Menor", "NK Celje": "Menor"
 }
 
 EQUIPOS_CONFERENCE = {
-    "Atalanta": "Top 1", "Getafe": "Top 1", "SC Friburgo": "Top 1", "AS Monaco": "Top 1",
-    "Brighton": "Top 1", "Ajax": "Top 2", "FC Twente": "Top 2", "SC Braga": "Top 2",
-    "FC Copenhague": "Media / Alta", "FC Midtjylland": "Media", "FC Nordsjælland": "Media",
-    "AGF Aarhus": "Media", "SK Brann": "Media", "Mjällby AIF": "Menor", "KuPS Kuopio": "Menor",
-    "Rangers": "Media / Alta", "Heart of Midlothian": "Media", "KAA Gent": "Media / Alta",
-    "Sint-Truidense": "Media", "FC Lugano": "Media", "FC St. Gallen": "Media", "FC Thun": "Media",
-    "Panathinaikos": "Media / Alta", "Trabzonspor": "Media / Alta", "Crvena Zvezda (Conf)": "Media / Alta",
-    "Hajduk Split": "Media", "FK Jablonec": "Menor", "Borac Banja Luka": "Menor",
-    "Raków": "Media", "Pafos FC": "Menor", "Riga FC": "Menor", "KF Egnatia": "Menor",
-    "Iberia Tbilisi": "Menor", "Kairat Almaty": "Menor", "Kauno Žalgiris": "Menor",
-    "CSKA Sofía": "Media", "Universitatea Craiova": "Media"
+    "Brighton & Hove Albion": "Top 2",
+    "Atalanta": "Top 1",
+    "Getafe": "Media / Alta",
+    "SC Freiburg": "Media / Alta",
+    "AS Monaco": "Top 2",
+    "Ajax": "Top 2", "FC Twente": "Media / Alta",
+    "SC Braga": "Top 2",
+    "KAA Gent": "Media",
+    "Panathinaikos": "Media", "FC Lugano": "Media", "FC Copenhagen": "Media",
+    "Midtjylland": "Media", "SK Brann": "Media", "Hajduk Split": "Media",
+    "Pafos FC": "Menor", "KuPS Kuopio": "Menor", "Riga FC": "Menor",
+    "Inter Club d'Escaldes": "Menor", "Hearts": "Media", "Jablonec": "Menor"
 }
 
-PESO_NIVEL = {"Top 1": 5, "Top 2": 4, "Media / Alta": 3, "Media": 2, "Menor": 1}
+# ==========================================
+# INICIALIZACIÓN DE ESTADO (SESSION STATE)
+# ==========================================
+if 'torneo_actual' not in st.session_state:
+    st.session_state.torneo_actual = "Champions League"
 
-# --- INICIALIZAR ESTADO DE SESIÓN ---
-def inicializar_estado():
-    for torneo_key, dict_eq in [("Champions", EQUIPOS_CHAMPIONS), ("Europa", EQUIPOS_EUROPA), ("Conference", EQUIPOS_CONFERENCE)]:
-        key_standings = f"standings_{torneo_key}"
-        if key_standings not in st.session_state:
-            st.session_state[key_standings] = {
-                eq: {
-                    "PJ": 0, "G": 0, "E": 0, "P": 0, "GF": 0, "GA": 0, "Pts": 0, "Liga": liga,
-                    "Racha": [], "Partidos_Sufridos": []
-                }
-                for eq, liga in dict_eq.items()
-            }
-    if 'historial_partidos' not in st.session_state:
-        st.session_state.historial_partidos = []
-
-inicializar_estado()
-
-# --- SELECTOR DE TORNEO ---
-torneo_uefa = st.selectbox(
-    "🏆 Selecciona la Competición Europea",
-    ["UEFA Champions League", "UEFA Europa League", "UEFA Conference League"],
-    key="select_torneo"
-)
-
-if torneo_uefa == "UEFA Champions League":
-    standings_key = "standings_Champions"
-elif torneo_uefa == "UEFA Europa League":
-    standings_key = "standings_Europa"
-else:
-    standings_key = "standings_Conference"
-
-current_standings = st.session_state[standings_key]
-lista_equipos = sorted(list(current_standings.keys()))
-
-st.markdown("---")
-
-# --- PESTAÑAS ---
-tab_juego, tab_tabla, tab_analisis, tab_historial, tab_respaldo = st.tabs([
-    "⚽ Registrar Partido", 
-    "📊 Tabla Viva", 
-    "🤖 Pronóstico y Lectura",
-    "📜 Historial",
-    "💾 Guardar / Cargar"
-])
-
-# --- PESTAÑA 1: REGISTRAR PARTIDO ---
-with tab_juego:
-    st.markdown("### 🏟️ Carga de Resultados")
-    col_eq1, col_eq2 = st.columns(2)
-
-    with col_eq1:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("🏠 Local")
-        equipo_local = st.selectbox("Selecciona Local", lista_equipos, key="loc_sel")
-        goles_local = st.number_input("Goles Local", 0, 20, 0, key="g_loc")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col_eq2:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("✈️ Visitante")
-        equipos_vis = [e for e in lista_equipos if e != equipo_local]
-        equipo_visita = st.selectbox("Selecciona Visitante", equipos_vis, key="vis_sel")
-        goles_visita = st.number_input("Goles Visitante", 0, 20, 0, key="g_vis")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    if st.button("💾 Registrar Partido", type="primary", use_container_width=True):
-        lvl_loc = PESO_NIVEL.get(current_standings[equipo_local]["Liga"], 3)
-        lvl_vis = PESO_NIVEL.get(current_standings[equipo_visita]["Liga"], 3)
-
-        current_standings[equipo_local]["PJ"] += 1
-        current_standings[equipo_local]["GF"] += goles_local
-        current_standings[equipo_local]["GA"] += goles_visita
-
-        current_standings[equipo_visita]["PJ"] += 1
-        current_standings[equipo_visita]["GF"] += goles_visita
-        current_standings[equipo_visita]["GA"] += goles_local
-
-        if goles_local > goles_visita:
-            current_standings[equipo_local]["G"] += 1
-            current_standings[equipo_local]["Pts"] += 3
-            current_standings[equipo_local]["Racha"].append("G")
-            current_standings[equipo_visita]["P"] += 1
-            current_standings[equipo_visita]["Racha"].append("P")
-
-            if (lvl_loc - lvl_vis >= 2) and (goles_local - goles_visita == 1):
-                msg = f"Ganó ajustado ({goles_local}-{goles_visita}) ante {equipo_visita}"
-                current_standings[equipo_local]["Partidos_Sufridos"].append(msg)
-
-        elif goles_visita > goles_local:
-            current_standings[equipo_visita]["G"] += 1
-            current_standings[equipo_visita]["Pts"] += 3
-            current_standings[equipo_visita]["Racha"].append("G")
-            current_standings[equipo_local]["P"] += 1
-            current_standings[equipo_local]["Racha"].append("P")
-
-            if (lvl_vis - lvl_loc >= 2) and (goles_visita - goles_local == 1):
-                msg = f"Ganó ajustado ({goles_visita}-{goles_local}) de visita ante {equipo_local}"
-                current_standings[equipo_visita]["Partidos_Sufridos"].append(msg)
-
-        else:
-            current_standings[equipo_local]["E"] += 1
-            current_standings[equipo_local]["Pts"] += 1
-            current_standings[equipo_local]["Racha"].append("E")
-            current_standings[equipo_visita]["E"] += 1
-            current_standings[equipo_visita]["Pts"] += 1
-            current_standings[equipo_visita]["Racha"].append("E")
-
-            if (lvl_loc - lvl_vis >= 2):
-                msg = f"Empató en casa contra {equipo_visita}"
-                current_standings[equipo_local]["Partidos_Sufridos"].append(msg)
-
-        st.session_state.historial_partidos.append({
-            "Torneo": torneo_uefa, "Local": equipo_local, "GL": goles_local, "GV": goles_visita, "Visitante": equipo_visita
-        })
-        st.success(f"✅ ¡Partido sumado a la tabla!")
-
-# --- PESTAÑA 2: TABLA VIVA ---
-with tab_tabla:
-    st.markdown(f"### 📊 Tabla Viva - {torneo_uefa}")
-    data_list = []
-    for eq, stats in current_standings.items():
-        dg = stats["GF"] - stats["GA"]
-        racha_str = " ".join([f"[{r}]" for r in stats["Racha"][-5:]]) if stats["Racha"] else "Sin partidos"
-        prom_gf = round(stats["GF"] / stats["PJ"], 2) if stats["PJ"] > 0 else 0.0
-        prom_ga = round(stats["GA"] / stats["PJ"], 2) if stats["PJ"] > 0 else 0.0
-        
-        data_list.append({
-            "Equipo": eq, "Perfil": stats["Liga"], "PJ": stats["PJ"],
-            "G": stats["G"], "E": stats["E"], "P": stats["P"],
-            "GF": stats["GF"], "GA": stats["GA"], "Prom GF": prom_gf,
-            "Prom GA": prom_ga, "DG": dg, "Pts": stats["Pts"], "Forma": racha_str
-        })
-    
-    df_standings = pd.DataFrame(data_list).sort_values(by=["Pts", "DG", "GF"], ascending=False).reset_index(drop=True)
-    df_standings.index += 1
-    st.dataframe(df_standings, use_container_width=True)
-
-# --- PESTAÑA 3: PRONÓSTICO CON LECTURA Y MENSAJES SIEMPRE VISIBLES ---
-with tab_analisis:
-    st.markdown("### 🔬 Pronóstico, Lectura en Vivo y Marcadores")
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        pred_local = st.selectbox("Selecciona Local", lista_equipos, key="p_loc")
-    with col_p2:
-        pred_visita = st.selectbox("Selecciona Visitante", [e for e in lista_equipos if e != pred_local], key="p_vis")
-        
-    if st.button("🚀 Calcular Estadísticas y Generar Lectura", type="primary", use_container_width=True):
-        st_l = current_standings[pred_local]
-        st_v = current_standings[pred_visita]
-        
-        pj_l = st_l["PJ"]
-        pj_v = st_v["PJ"]
-
-        # Si aún no hay partidos jugados, asignamos según el perfil técnico del equipo
-        if pj_l > 0:
-            prom_gf_l = st_l["GF"] / pj_l
-            prom_ga_l = st_l["GA"] / pj_l
-        else:
-            prom_gf_l = {"Top 1": 2.2, "Top 2": 1.7, "Media / Alta": 1.4, "Media": 1.1, "Menor": 0.8}.get(st_l["Liga"], 1.2)
-            prom_ga_l = {"Top 1": 0.8, "Top 2": 1.0, "Media / Alta": 1.2, "Media": 1.4, "Menor": 1.8}.get(st_l["Liga"], 1.2)
-
-        if pj_v > 0:
-            prom_gf_v = st_v["GF"] / pj_v
-            prom_ga_v = st_v["GA"] / pj_v
-        else:
-            prom_gf_v = {"Top 1": 2.0, "Top 2": 1.5, "Media / Alta": 1.2, "Media": 1.0, "Menor": 0.7}.get(st_v["Liga"], 1.0)
-            prom_ga_v = {"Top 1": 0.9, "Top 2": 1.1, "Media / Alta": 1.3, "Media": 1.5, "Menor": 1.9}.get(st_v["Liga"], 1.2)
-
-        lambda_local = max(0.4, (prom_gf_l + prom_ga_v) / 2.0)
-        lambda_visita = max(0.3, (prom_gf_v + prom_ga_l) / 2.0)
-
-        max_goles = 8
-        matriz_prob = np.zeros((max_goles, max_goles))
-        rho = -0.13
-
-        for i in range(max_goles):
-            for j in range(max_goles):
-                p_i = poisson.pmf(i, lambda_local)
-                p_j = poisson.pmf(j, lambda_visita)
-                prob_base = p_i * p_j
-                
-                if i == 0 and j == 0: tau = 1.0 - (lambda_local * lambda_visita * rho)
-                elif i == 1 and j == 0: tau = 1.0 + (lambda_local * rho)
-                elif i == 0 and j == 1: tau = 1.0 + (lambda_visita * rho)
-                elif i == 1 and j == 1: tau = 1.0 - rho
-                else: tau = 1.0
-                    
-                matriz_prob[i, j] = max(0.0, prob_base * tau)
-
-        matriz_prob /= np.sum(matriz_prob)
-
-        p_local = np.sum(np.tril(matriz_prob, -1)) * 100
-        p_empate = np.sum(np.diag(matriz_prob)) * 100
-        p_visita = np.sum(np.triu(matriz_prob, 1)) * 100
-
-        p_btts = sum(matriz_prob[i, j] for i in range(1, max_goles) for j in range(1, max_goles)) * 100
-        p_over25 = sum(matriz_prob[i, j] for i in range(max_goles) for j in range(max_goles) if (i + j) > 2.5) * 100
-
-        st.markdown("---")
-        
-        # --- GENERADOR DE MENSAJES Y LECTURA CON VIDA ---
-        st.markdown("### 🗣️ Lectura y Diagnóstico del Partido")
-
-        # 1. MENSAJE BASE SIEMPRE PRESENTE
-        if pj_l == 0 and pj_v == 0:
-            st.markdown(
-                f"<div class='mensaje-box'>📌 **ANÁLISIS INICIAL (SIN REGISTRO EN TABLA):** "
-                f"Este pronóstico se basa en el perfil base de los equipos (**{pred_local}** [{st_l['Liga']}] vs **{pred_visita}** [{st_v['Liga']}]). "
-                f"A medida que cargues resultados en la pestaña 'Registrar Partido', este dictamen se irá afinando automáticamente.</div>",
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                f"<div class='mensaje-box'>📊 **LECTURA BASADA EN TABLA VIVA:** "
-                f"Diagnóstico generado tras analizar **{pj_l}** partidos de **{pred_local}** y **{pj_v}** partidos de **{pred_visita}**.</div>",
-                unsafe_allow_html=True
-            )
-
-        # 2. MENSAJES DE FUERZA DE LOCAL / VISITANTE O EQUILIBRIO
-        if p_local >= 55.0:
-            st.markdown(f"<div class='fuerza-box'>💪 **VIENE CON FUERZA DE LOCAL:** **{pred_local}** marca una clara ventaja estadística. La proyección de goles favorece una victoria cómoda de su parte.</div>", unsafe_allow_html=True)
-        elif p_visita >= 52.0:
-            st.markdown(f"<div class='fuerza-box'>🚀 **VIENE CON FUERZA DE VISITANTE:** **{pred_visita}** se muestra superior según el modelo. Tienen alta probabilidad de imponerse fuera de casa.</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='mensaje-box'>⚖️ **PARTIDO APRETADO / PAREJO:** Ninguno saca una diferencia abrumadora. Las probabilidades están repartidas y hay buen margen para cubrir empates o hándicaps.</div>", unsafe_allow_html=True)
-
-        # 3. MENSAJES DE AMBOS MARCAN (BTTS)
-        if p_btts >= 55.0:
-            st.markdown(f"<div class='btts-box'>🔥 **AMBOS MARCAN CALIENTE ({p_btts:.1f}%):** Tendencia marcada a que los dos anoten. Se proyecta un duelo con oportunidades en ambas porterías.</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='mensaje-box'>🛡️ **AMBOS MARCAN RESERVADO ({p_btts:.1f}%):** Tendencia moderada/baja a gol mutuo. Hay probabilidad de que alguno mantenga su portería a cero.</div>", unsafe_allow_html=True)
-
-        # 4. MENSAJE DE OVER 2.5
-        if p_over25 >= 55.0:
-            st.markdown(f"<div class='btts-box'>⚽ **LÍNEA DE GOLES ABIERTA:** Alta posibilidad de ver un partido de 3 o más goles total (Over 2.5 en **{p_over25:.1f}%**).</div>", unsafe_allow_html=True)
-
-        # 5. ALERTAS DE PARTIDOS SUFRIDOS
-        if len(st_l["Partidos_Sufridos"]) > 0:
-            for msj in st_l["Partidos_Sufridos"][-2:]:
-                st.markdown(f"<div class='mensaje-box'>⚠️ **OJO CON {pred_local.upper()}:** En la tabla reciente {msj}.</div>", unsafe_allow_html=True)
-        if len(st_v["Partidos_Sufridos"]) > 0:
-            for msj in st_v["Partidos_Sufridos"][-2:]:
-                st.markdown(f"<div class='mensaje-box'>⚠️ **OJO CON {pred_visita.upper()}:** En la tabla reciente {msj}.</div>", unsafe_allow_html=True)
-
-        st.markdown("---")
-        st.subheader("📌 Promedios de Goles Aplicados")
-        st.info(f"🏠 **{pred_local}:** Anotado proyectado: **{prom_gf_l:.2f}** | Encajado proyectado: **{prom_ga_l:.2f}**")
-        st.info(f"✈️ **{pred_visita}:** Anotado proyectado: **{prom_gf_v:.2f}** | Encajado proyectado: **{prom_ga_v:.2f}**")
-
-        st.markdown("### 📊 Porcentajes del Partido")
-        res_c1, res_c2, res_c3 = st.columns(3)
-        with res_c1: st.markdown(f"<div class='metric-card'><h4>Gana {pred_local}</h4><h2>{p_local:.1f}%</h2></div>", unsafe_allow_html=True)
-        with res_c2: st.markdown(f"<div class='metric-card'><h4>Empate</h4><h2>{p_empate:.1f}%</h2></div>", unsafe_allow_html=True)
-        with res_c3: st.markdown(f"<div class='metric-card'><h4>Gana {pred_visita}</h4><h2>{p_visita:.1f}%</h2></div>", unsafe_allow_html=True)
-
-        res_k1, res_k2 = st.columns(2)
-        with res_k1: st.markdown(f"<div class='metric-card' style='margin-top:10px;'><h4>Ambos Anotan</h4><h3>{p_btts:.1f}%</h3></div>", unsafe_allow_html=True)
-        with res_k2: st.markdown(f"<div class='metric-card' style='margin-top:10px;'><h4>Más de 2.5 Goles</h4><h3>{p_over25:.1f}%</h3></div>", unsafe_allow_html=True)
-
-        # --- TABLA DE MARCADORES EXACTOS ---
-        st.markdown("---")
-        st.markdown("### 🎯 Top Marcadores Exactos Más Probables")
-        
-        marcadores_lista = []
-        for i in range(6):
-            for j in range(6):
-                prob = matriz_prob[i, j] * 100
-                marcadores_lista.append({
-                    "Marcador": f"{pred_local} {i} - {j} {pred_visita}",
-                    "Probabilidad": prob
-                })
-        
-        df_marcadores = pd.DataFrame(marcadores_lista).sort_values(by="Probabilidad", ascending=False).head(8).reset_index(drop=True)
-        df_marcadores.index += 1
-        df_marcadores["Probabilidad"] = df_marcadores["Probabilidad"].map(lambda x: f"{x:.2f}%")
-        
-        st.dataframe(df_marcadores, use_container_width=True)
-
-# --- PESTAÑA 4: HISTORIAL ---
-with tab_historial:
-    st.markdown(f"### 📜 Partidos Registrados - {torneo_uefa}")
-    partidos_torneo = [p for p in st.session_state.historial_partidos if p["Torneo"] == torneo_uefa]
-    if partidos_torneo:
-        st.dataframe(pd.DataFrame(partidos_torneo), use_container_width=True)
+def obtener_equipos_torneo(torneo):
+    if torneo == "Champions League":
+        return EQUIPOS_CHAMPIONS
+    elif torneo == "Europa League":
+        return EQUIPOS_EUROPA
     else:
-        st.info("No hay partidos registrados en este torneo.")
+        return EQUIPOS_CONFERENCE
 
-# --- PESTAÑA 5: GUARDAR Y CARGAR EN EL TELÉFONO ---
-with tab_respaldo:
-    st.markdown("### 📲 Respaldos para tu Teléfono")
+def inicializar_torneo(nombre_torneo):
+    prefix = nombre_torneo.lower().replace(" ", "_")
+    equipos_dict = obtener_equipos_torneo(nombre_torneo)
     
-    datos_actuales = {
-        "standings_Champions": st.session_state["standings_Champions"],
-        "standings_Europa": st.session_state["standings_Europa"],
-        "standings_Conference": st.session_state["standings_Conference"],
-        "historial_partidos": st.session_state.historial_partidos
+    if f'{prefix}_partidos' not in st.session_state:
+        st.session_state[f'{prefix}_partidos'] = []
+    
+    if f'{prefix}_tabla' not in st.session_state:
+        tabla_init = {}
+        for eq in equipos_dict.keys():
+            tabla_init[eq] = {
+                "PJ": 0, "PG": 0, "PE": 0, "PP": 0,
+                "GF": 0, "GC": 0, "DG": 0, "Pts": 0
+            }
+        st.session_state[f'{prefix}_tabla'] = tabla_init
+
+inicializar_torneo("Champions League")
+inicializar_torneo("Europa League")
+inicializar_torneo("Conference League")
+
+# ==========================================
+# MOTOR MATEMÁTICO (DIXON-COLES / POISSON)
+# ==========================================
+def dixon_coles_adjustment(x, y, lambda_x, mu_y, rho=-0.13):
+    if x == 0 and y == 0:
+        return 1 - lambda_x * mu_y * rho
+    elif x == 0 and y == 1:
+        return 1 + lambda_x * rho
+    elif x == 1 and y == 0:
+        return 1 + mu_y * rho
+    elif x == 1 and y == 1:
+        return 1 - rho
+    else:
+        return 1.0
+
+def calcular_probabilidades_partido(l_local, l_visitante, max_goles=7):
+    prob_matriz = np.zeros((max_goles, max_goles))
+    for x in range(max_goles):
+        for y in range(max_goles):
+            p_x = poisson.pmf(x, l_local)
+            p_y = poisson.pmf(y, l_visitante)
+            adj = dixon_coles_adjustment(x, y, l_local, l_visitante)
+            prob_matriz[x, y] = p_x * p_y * adj
+            
+    prob_matriz = prob_matriz / np.sum(prob_matriz)
+    
+    prob_local = np.sum(np.tril(prob_matriz, -1))
+    prob_empate = np.sum(np.diag(prob_matriz))
+    prob_visitante = np.sum(np.triu(prob_matriz, 1))
+    
+    return prob_local, prob_empate, prob_visitante, prob_matriz
+
+def obtener_lambdas(eq_local, eq_vis, torneo):
+    equipos = obtener_equipos_torneo(torneo)
+    prefix = torneo.lower().replace(" ", "_")
+    tabla = st.session_state[f'{prefix}_tabla']
+    
+    cat_l = equipos.get(eq_local, "Media")
+    cat_v = equipos.get(eq_vis, "Media")
+    
+    base_l = 1.6 if "Top 1" in cat_l else (1.4 if "Top 2" in cat_l else 1.1)
+    base_v = 1.4 if "Top 1" in cat_v else (1.2 if "Top 2" in cat_v else 0.9)
+    
+    stats_l = tabla.get(eq_local, {"PJ": 0, "GF": 0, "GC": 0})
+    stats_v = tabla.get(eq_vis, {"PJ": 0, "GF": 0, "GC": 0})
+    
+    if stats_l["PJ"] > 0:
+        factor_l = (stats_l["GF"] / stats_l["PJ"]) / max(1.0, (stats_v["GC"] / max(1, stats_v["PJ"])))
+        base_l = (base_l + factor_l) / 2
+        
+    if stats_v["PJ"] > 0:
+        factor_v = (stats_v["GF"] / stats_v["PJ"]) / max(1.0, (stats_l["GC"] / max(1, stats_l["PJ"])))
+        base_v = (base_v + factor_v) / 2
+
+    return max(0.4, base_l), max(0.3, base_v)
+
+# ==========================================
+# INTERFAZ DE USUARIO
+# ==========================================
+st.sidebar.title("⚽ Navegación")
+torneo_sel = st.sidebar.selectbox(
+    "Selecciona la Competición:",
+    ["Champions League", "Europa League", "Conference League"],
+    index=["Champions League", "Europa League", "Conference League"].index(st.session_state.torneo_actual)
+)
+st.session_state.torneo_actual = torneo_sel
+prefix_act = torneo_sel.lower().replace(" ", "_")
+
+st.title(f"🏆 Pronosticador: {torneo_sel}")
+
+pestanas = st.tabs(["📊 Tabla de Posiciones", "⚽ Registrar Partido", "🔮 Pronóstico Dixon-Coles", "📈 Diagnósticos Avanzados", "💾 Respaldos (Móvil/PC)"])
+
+# ------------------------------------------
+# PESTAÑA 1: TABLA DE POSICIONES
+# ------------------------------------------
+with pestanas[0]:
+    st.subheader(f"Tabla En Vivo - {torneo_sel}")
+    tabla_data = st.session_state[f'{prefix_act}_tabla']
+    df_tabla = pd.DataFrame.from_dict(tabla_data, orient='index')
+    df_tabla = df_tabla.sort_values(by=["Pts", "DG", "GF"], ascending=False)
+    
+    st.dataframe(df_tabla.style.highlight_max(axis=0, subset=["Pts", "DG", "GF"], color="#1E3A8A"), use_container_width=True)
+
+# ------------------------------------------
+# PESTAÑA 2: REGISTRAR PARTIDO
+# ------------------------------------------
+with pestanas[1]:
+    st.subheader("Ingresar Resultado Oficial")
+    equipos_lista = list(obtener_equipos_torneo(torneo_sel).keys())
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        eq_loc = st.selectbox("Equipo Local:", equipos_lista, key="reg_loc")
+        goles_loc = st.number_input("Goles Local:", min_value=0, max_value=15, value=0, key="g_loc")
+    with col2:
+        eq_vis = st.selectbox("Equipo Visitante:", [e for e in equipos_lista if e != eq_loc], key="reg_vis")
+        goles_vis = st.number_input("Goles Visitante:", min_value=0, max_value=15, value=0, key="g_vis")
+        
+    if st.button("Guardar Partido", type="primary"):
+        st.session_state[f'{prefix_act}_partidos'].append({
+            "local": eq_loc, "goles_local": goles_loc,
+            "visitante": eq_vis, "goles_visitante": goles_vis
+        })
+        
+        t = st.session_state[f'{prefix_act}_tabla']
+        t[eq_loc]["PJ"] += 1; t[eq_vis]["PJ"] += 1
+        t[eq_loc]["GF"] += goles_loc; t[eq_loc]["GC"] += goles_vis
+        t[eq_vis]["GF"] += goles_vis; t[eq_vis]["GC"] += goles_loc
+        t[eq_loc]["DG"] = t[eq_loc]["GF"] - t[eq_loc]["GC"]
+        t[eq_vis]["DG"] = t[eq_vis]["GF"] - t[eq_vis]["GC"]
+        
+        if goles_loc > goles_vis:
+            t[eq_loc]["PG"] += 1; t[eq_loc]["Pts"] += 3
+            t[eq_vis]["PP"] += 1
+        elif goles_loc < goles_vis:
+            t[eq_vis]["PG"] += 1; t[eq_vis]["Pts"] += 3
+            t[eq_loc]["PP"] += 1
+        else:
+            t[eq_loc]["PE"] += 1; t[eq_loc]["Pts"] += 1
+            t[eq_vis]["PE"] += 1; t[eq_vis]["Pts"] += 1
+            
+        st.success(f"¡Partido {eq_loc} {goles_loc} - {goles_vis} {eq_vis} registrado con éxito!")
+        st.rerun()
+
+# ------------------------------------------
+# PESTAÑA 3: PRONÓSTICO DIXON-COLES
+# ------------------------------------------
+with pestanas[2]:
+    st.subheader("Calculadora de Probabilidades Poisson / Dixon-Coles")
+    equipos_lista = list(obtener_equipos_torneo(torneo_sel).keys())
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        p_loc = st.selectbox("Equipo Local (Pronóstico):", equipos_lista, key="p_loc")
+    with c2:
+        p_vis = st.selectbox("Equipo Visitante (Pronóstico):", [e for e in equipos_lista if e != p_loc], key="p_vis")
+        
+    l_l, l_v = obtener_lambdas(p_loc, p_vis, torneo_sel)
+    p_local, p_empate, p_visitante, matriz = calcular_probabilidades_partido(l_l, l_v)
+    
+    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1.metric(f"Victoria {p_loc}", f"{p_local*100:.1f}%", f"Cuota: {1/max(0.01, p_local):.2f}")
+    col_m2.metric("Empate", f"{p_empate*100:.1f}%", f"Cuota: {1/max(0.01, p_empate):.2f}")
+    col_m3.metric(f"Victoria {p_vis}", f"{p_visitante*100:.1f}%", f"Cuota: {1/max(0.01, p_visitante):.2f}")
+    
+    st.markdown("---")
+    st.subheader("Matriz de Marcadores Exactos Probables")
+    df_matriz = pd.DataFrame(matriz[:5, :5], 
+                             index=[f"{p_loc} {i}" for i in range(5)],
+                             columns=[f"{p_vis} {j}" for j in range(5)])
+    st.dataframe((df_matriz * 100).style.format("{:.2f}%").background_gradient(cmap="Blues"), use_container_width=True)
+
+# ------------------------------------------
+# PESTAÑA 4: DIAGNÓSTICOS AVANZADOS
+# ------------------------------------------
+with pestanas[3]:
+    st.subheader("Análisis Técnico y Estadístico")
+    st.write(f"Parámetros actuales del motor para **{torneo_sel}**:")
+    st.json({
+        "Ajuste Dixon-Coles (rho)": -0.13,
+        "Total Equipos en Torneo": len(obtener_equipos_torneo(torneo_sel)),
+        "Partidos Registrados": len(st.session_state[f'{prefix_act}_partidos'])
+    })
+
+# ------------------------------------------
+# PESTAÑA 5: RESPALDOS (MÓVIL / PC)
+# ------------------------------------------
+with pestanas[4]:
+    st.subheader("Sistema de Respaldos Multiformato (.txt / .json)")
+    st.info("Descarga o restaura la información de tus partidos sin bloqueos en navegadores móviles.")
+    
+    datos_exportar = {
+        "champions_league_partidos": st.session_state.get('champions_league_partidos', []),
+        "champions_league_tabla": st.session_state.get('champions_league_tabla', {}),
+        "europa_league_partidos": st.session_state.get('europa_league_partidos', []),
+        "europa_league_tabla": st.session_state.get('europa_league_tabla', {}),
+        "conference_league_partidos": st.session_state.get('conference_league_partidos', []),
+        "conference_league_tabla": st.session_state.get('conference_league_tabla', {})
     }
-    json_bytes = json.dumps(datos_actuales, ensure_ascii=False, indent=2).encode('utf-8')
+    
+    json_str = json.dumps(datos_exportar, indent=4, ensure_ascii=False)
     
     col_d1, col_d2 = st.columns(2)
     with col_d1:
         st.download_button(
-            label="📥 Descargar (.json)",
-            data=json_bytes,
-            file_name="respaldo_futbol_zohan.json",
-            mime="application/json",
-            use_container_width=True
+            label="💾 Descargar Respaldo Móvil (.txt)",
+            data=json_str,
+            file_name="respaldo_pronosticador.txt",
+            mime="text/plain",
+            type="primary"
         )
     with col_d2:
         st.download_button(
-            label="📥 Descargar (.txt - Recomendado Móvil)",
-            data=json_bytes,
-            file_name="respaldo_futbol_zohan.txt",
-            mime="text/plain",
-            use_container_width=True
+            label="💾 Descargar Respaldo Estándar (.json)",
+            data=json_str,
+            file_name="respaldo_pronosticador.json",
+            mime="application/json"
         )
-    
+        
     st.markdown("---")
-    st.markdown("#### 📤 Restaurar la Tabla desde tu Teléfono")
+    st.subheader("Restaurar Respaldo")
     
-    # Al incluir "txt" y "json", el navegador del teléfono ya no oculta los archivos en la carpeta
-    archivo_subido = st.file_uploader(
-        "Selecciona tu archivo de respaldo (.json o .txt)", 
-        type=["txt", "json"]
-    )
+    archivo_subido = st.file_uploader("Selecciona tu archivo de respaldo (.txt o .json):", type=["txt", "json"])
     
     if archivo_subido is not None:
         try:
-            contenido_bytes = archivo_subido.getvalue()
-            contenido_texto = contenido_bytes.decode("utf-8-sig", errors="ignore")
-            datos_cargados = json.loads(contenido_texto)
-            
-            if "standings_Champions" in datos_cargados:
-                st.session_state["standings_Champions"] = datos_cargados["standings_Champions"]
-                st.session_state["standings_Europa"] = datos_cargados["standings_Europa"]
-                st.session_state["standings_Conference"] = datos_cargados["standings_Conference"]
-                st.session_state["historial_partidos"] = datos_cargados.get("historial_partidos", [])
-                
-                st.success("✅ ¡Tabla y datos restaurados con éxito!")
-                st.rerun()
-            else:
-                st.error("❌ El archivo no contiene la estructura requerida del Búnker.")
-                
+            contenido = json.load(archivo_subido)
+            for key, val in contenido.items():
+                st.session_state[key] = val
+            st.success("¡Respaldo restaurado con éxito en todas las competiciones!")
+            st.rerun()
         except Exception as e:
-            st.error(f"❌ Error al procesar el archivo: {e}")
+            st.error(f"Error al leer el archivo de respaldo: {e}")
 
