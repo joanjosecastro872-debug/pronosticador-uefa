@@ -36,7 +36,7 @@ st.markdown("""
 """, unsafe_allowed_syntax=True)
 
 # ==========================================
-# DICCIONARIOS OFICIALES DE EQUIPOS (REUBICADOS CORRECTAMENTE)
+# DICCIONARIOS OFICIALES DE EQUIPOS
 # ==========================================
 EQUIPOS_CHAMPIONS = {
     "Real Madrid": "Top 1", "Barcelona": "Top 1", "Atlético de Madrid": "Top 1", "Villarreal": "Top 1", "Real Betis": "Top 1",
@@ -84,7 +84,7 @@ EQUIPOS_CONFERENCE = {
 }
 
 # ==========================================
-# INICIALIZACIÓN DE ESTADO (SESSION STATE)
+# FUNCIONES DE CONTROL DE ESTADO (SESSION STATE)
 # ==========================================
 if 'torneo_actual' not in st.session_state:
     st.session_state.torneo_actual = "Champions League"
@@ -113,20 +113,22 @@ def inicializar_torneo(nombre_torneo):
             }
         st.session_state[f'{prefix}_tabla'] = tabla_init
 
-def limpiar_equipos_obsoletos(nombre_torneo):
-    prefix = nombre_torneo.lower().replace(" ", "_")
-    equipos_validos = set(obtener_equipos_torneo(nombre_torneo).keys())
-    
-    if f'{prefix}_tabla' in st.session_state:
-        claves_existentes = list(st.session_state[f'{prefix}_tabla'].keys())
-        for eq in claves_existentes:
-            if eq not in equipos_validos:
-                del st.session_state[f'{prefix}_tabla'][eq]
+def purgar_todos_los_torneos():
+    """Recorre la memoria actual y borra cualquier equipo fuera del diccionario oficial."""
+    for torneo in ["Champions League", "Europa League", "Conference League"]:
+        prefix = torneo.lower().replace(" ", "_")
+        equipos_validos = set(obtener_equipos_torneo(torneo).keys())
+        
+        if f'{prefix}_tabla' in st.session_state:
+            claves = list(st.session_state[f'{prefix}_tabla'].keys())
+            for eq in claves:
+                if eq not in equipos_validos:
+                    del st.session_state[f'{prefix}_tabla'][eq]
 
-# Inicializar y Purgar Memoria de Todos los Torneos
+# Inicialización primaria y purga
 for torneo in ["Champions League", "Europa League", "Conference League"]:
     inicializar_torneo(torneo)
-    limpiar_equipos_obsoletos(torneo)
+purgar_todos_los_torneos()
 
 # ==========================================
 # MOTOR MATEMÁTICO (DIXON-COLES / POISSON)
@@ -338,8 +340,11 @@ with pestanas[4]:
             contenido = json.load(archivo_subido)
             for key, val in contenido.items():
                 st.session_state[key] = val
-            st.success("¡Respaldo restaurado con éxito en todas las competiciones!")
+            
+            # PURGA INMEDIATA AL CARGAR EL ARCHIVO
+            purgar_todos_los_torneos()
+            
+            st.success("¡Respaldo restaurado y purgado con éxito!")
             st.rerun()
         except Exception as e:
             st.error(f"Error al leer el archivo de respaldo: {e}")
-
