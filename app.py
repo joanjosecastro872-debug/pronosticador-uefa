@@ -8,7 +8,7 @@ import json
 # CONFIGURACIÓN INICIAL Y ESTILOS
 # ==========================================
 st.set_page_config(
-    page_title="Pronosticador Pro: Elo, Skellam & Montecarlo",
+    page_title="Pronosticador Pro: Base en Tabla & Montecarlo",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -109,7 +109,7 @@ for torneo in ["Champions League", "Europa League", "Conference League"]:
     inicializar_torneo(torneo)
 
 # ==========================================
-# MOTOR MATEMÁTICO (ELO, DIXON-COLES, SKELLAM, MONTECARLO)
+# MOTOR MATEMÁTICO BASADO ESTRICTAMENTE EN LA TABLA
 # ==========================================
 def actualizar_elo(elo_local, elo_vis, goles_l, goles_v, k=32):
     diff = (elo_vis - (elo_local + 100)) / 400
@@ -129,10 +129,32 @@ def dixon_coles_adjustment(x, y, lambda_x, mu_y, rho=-0.13):
     elif x == 1 and y == 1: return 1 - rho
     else: return 1.0
 
+def calcular_lambdas_desde_tabla(eq_local, eq_vis, torneo):
+    """Calcula los goles esperados basándose PURAMENTE en los datos de la tabla de posiciones."""
+    prefix = torneo.lower().replace(" ", "_")
+    tabla = st.session_state[f'{prefix}_tabla']
+    
+    data_l = tabla.get(eq_local, {"PJ": 0, "GF": 0, "GC": 0, "Elo": 1500})
+    data_v = tabla.get(eq_vis, {"PJ": 0, "GF": 0, "GC": 0, "Elo": 1500})
+    
+    # Promedios base iniciales si aún no hay partidos jugados
+    l_ataque_l = (data_l["GF"] / data_l["PJ"]) if data_l["PJ"] > 0 else (1.8 if "Top 1" in data_l.get("Categoria", "") else 1.3)
+    l_defensa_v = (data_v["GC"] / data_v["PJ"]) if data_v["PJ"] > 0 else 1.2
+    
+    l_ataque_v = (data_v["GF"] / data_v["PJ"]) if data_v["PJ"] > 0 else (1.5 if "Top 1" in data_v.get("Categoria", "") else 1.0)
+    l_defensa_l = (data_l["GC"] / data_l["PJ"]) if data_l["PJ"] > 0 else 1.0
+
+    # Cruzar ataque real del local con la defensa real del visitante (y viceversa)
+    lambda_local = max(0.4, (l_ataque_l + l_defensa_v) / 2)
+    lambda_visitante = max(0.3, (l_ataque_v + l_defensa_l) / 2)
+
+    return lambda_local, lambda_visitante, data_l["Elo"], data_v["Elo"]
+
 def calcular_probabilidades_partido(l_local, l_visitante, elo_l, elo_v, max_goles=7):
+    # Ajuste dinámico basado en la tabla y Elo
     diff_elo = (elo_l - elo_v) / 400
-    factor_elo = 1 + (diff_elo * 0.15)
-    l_local = max(0.3, l_local * factor_elo)
+    factor_elo = 1 + (diff_elo * 0.20)
+    l_local = max(0.4, l_local * factor_elo)
     l_visitante = max(0.3, l_visitante / factor_elo)
 
     prob_matriz = np.zeros((max_goles, max_goles))
@@ -148,12 +170,11 @@ def calcular_probabilidades_partido(l_local, l_visitante, elo_l, elo_v, max_gole
     prob_empate = np.sum(np.diag(prob_matriz))
     prob_visitante = np.sum(np.triu(prob_matriz, 1))
     
-    # Skellam para diferencias
-    skellam_prob_empate = skellam.pmf(0, l_local, l_visitante) * 100
+    skellam_empate = skellam.pmf(0, l_local, l_visitante) * 100
     skellam_l1 = skellam.pmf(1, l_local, l_visitante) * 100
     skellam_v1 = skellam.pmf(-1, l_local, l_visitante) * 100
 
-    # Simulador de Montecarlo (10,000 iteraciones virtuales)
+    # Montecarlo (10,000 iteraciones)
     sim_goles_l = np.random.poisson(l_local, 10000)
     sim_goles_v = np.random.poisson(l_visitante, 10000)
     mc_wins_l = np.sum(sim_goles_l > sim_goles_v) / 100.0
@@ -161,33 +182,13 @@ def calcular_probabilidades_partido(l_local, l_visitante, elo_l, elo_v, max_gole
     mc_wins_v = np.sum(sim_goles_l < sim_goles_v) / 100.0
 
     return prob_local, prob_empate, prob_visitante, prob_matriz, {
-        "skellam_empate": skellam_prob_empate,
+        "skellam_empate": skellam_empate,
         "skellam_l1": skellam_l1,
         "skellam_v1": skellam_v1,
         "mc_local": mc_wins_l,
         "mc_empate": mc_empates,
         "mc_visita": mc_wins_v
     }
-
-def obtener_lambdas_y_elo(eq_local, eq_vis, torneo):
-    prefix = torneo.lower().replace(" ", "_")
-    tabla = st.session_state[f'{prefix}_tabla']
-    
-    data_l = tabla.get(eq_local, {"Elo": 1500, "Categoria": "Media", "PJ": 0, "GF": 0, "GC": 0})
-    data_v = tabla.get(eq_vis, {"Elo": 1500, "Categoria": "Media", "PJ": 0, "GF": 0, "GC": 0})
-    
-    base_l = 1.6 if "Top 1" in data_l["Categoria"] else (1.4 if "Top 2" in data_l["Categoria"] else 1.1)
-    base_v = 1.4 if "Top 1" in data_v["Categoria"] else (1.2 if "Top 2" in data_v["Categoria"] else 0.9)
-    
-    if data_l["PJ"] > 0:
-        factor_l = (data_l["GF"] / data_l["PJ"]) / max(1.0, (data_v["GC"] / max(1, data_v["PJ"])))
-        base_l = (base_l + factor_l) / 2
-        
-    if data_v["PJ"] > 0:
-        factor_v = (data_v["GF"] / data_v["PJ"]) / max(1.0, (data_l["GC"] / max(1, data_l["PJ"])))
-        base_v = (base_v + factor_v) / 2
-
-    return max(0.4, base_l), max(0.3, base_v), data_l["Elo"], data_v["Elo"]
 
 # ==========================================
 # INTERFAZ DE USUARIO
@@ -202,7 +203,7 @@ st.session_state.torneo_actual = torneo_sel
 prefix_act = torneo_sel.lower().replace(" ", "_")
 purgar_equipos_fuera_de_lugar(torneo_sel)
 
-st.title(f"🏆 Pronosticador Pro + Montecarlo: {torneo_sel}")
+st.title(f"🏆 Pronosticador Pro (Basado en Tabla): {torneo_sel}")
 
 pestanas = st.tabs(["📊 Tabla & Elo", "⚽ Registrar Partido", "🔮 Pronóstico Inteligente", "📈 Diagnósticos Avanzados", "💾 Respaldos"])
 
@@ -266,13 +267,13 @@ with pestanas[1]:
                 else:
                     t[eq_loc]["PE"] += 1; t[eq_loc]["Pts"] += 1; t[eq_vis]["PE"] += 1; t[eq_vis]["Pts"] += 1
                     
-                st.success(f"¡Partido guardado! Elo actualizado: {eq_loc} ({elo_viejo_l} ➔ {nuevo_elo_l}) | {eq_vis} ({elo_viejo_v} ➔ {nuevo_elo_v})")
+                st.success(f"¡Partido guardado! Tabla y Elo actualizados.")
 
 # ------------------------------------------
-# PESTAÑA 3: PRONÓSTICO INTELIGENTE Y MONTECARLO
+# PESTAÑA 3: PRONÓSTICO INTELIGENTE (BASADO EN TABLA)
 # ------------------------------------------
 with pestanas[2]:
-    st.subheader("🔮 Centro de Análisis: Poisson + Elo + Skellam + Montecarlo")
+    st.subheader("🔮 Centro de Análisis: Motor Conectado a la Tabla en Vivo")
     equipos_dict = obtener_equipos_torneo(torneo_sel)
     equipos_lista = sorted(list(equipos_dict.keys()))
     
@@ -280,17 +281,16 @@ with pestanas[2]:
     with c1: p_loc = st.selectbox("Equipo Local:", equipos_lista, key="p_loc")
     with c2: p_vis = st.selectbox("Equipo Visitante:", [e for e in equipos_lista if e != p_loc], key="p_vis")
         
-    l_l, l_v, elo_l, elo_v = obtener_lambdas_y_elo(p_loc, p_vis, torneo_sel)
+    l_l, l_v, elo_l, elo_v = calcular_lambdas_desde_tabla(p_loc, p_vis, torneo_sel)
     p_local, p_empate, p_visitante, matriz, metrics = calcular_probabilidades_partido(l_l, l_v, elo_l, elo_v)
     
-    # Tarjetas de métricas principales con validación Montecarlo
     col_m1, col_m2, col_m3 = st.columns(3)
     col_m1.metric(f"Victoria {p_loc}", f"{p_local*100:.1f}%", f"Montecarlo: {metrics['mc_local']:.1f}%")
     col_m2.metric("Empate", f"{p_empate*100:.1f}%", f"Montecarlo: {metrics['mc_empate']:.1f}%")
     col_m3.metric(f"Victoria {p_vis}", f"{p_visitante*100:.1f}%", f"Montecarlo: {metrics['mc_visita']:.1f}%")
     
     st.markdown("---")
-    st.markdown("### 💬 Mensajes y Diagnóstico Detallado")
+    st.markdown("### 💬 Diagnóstico Basado en Rendimiento de Tabla")
     
     max_idx = np.unravel_index(np.argmax(matriz), matriz.shape)
     g_l_pred, g_v_pred = max_idx
@@ -299,32 +299,17 @@ with pestanas[2]:
     btts_prob = np.sum(matriz[1:, 1:]) * 100
     over_25_prob = sum(matriz[x, y] for x in range(matriz.shape[0]) for y in range(matriz.shape[1]) if x + y >= 3) * 100
     
-    dif_elo_actual = elo_l - elo_v
-    if dif_elo_actual > 150:
-        mensaje_elo = f"🧠 **Memoria Inteligente Elo:** **{p_loc}** domina en rating competitivo global frente a **{p_vis}** ({elo_l} vs {elo_v} pts). Las simulaciones virtuales muestran control absoluto del local."
-    elif dif_elo_actual < -150:
-        mensaje_elo = f"🧠 **Memoria Inteligente Elo:** Atención. **{p_vis}** tiene mejor ranking Elo ({elo_v}) que el local ({elo_l}). Gran probabilidad de golpe visitante respaldada por las iteraciones de Montecarlo."
-    else:
-        mensaje_elo = f"🧠 **Memoria Inteligente Elo:** Partido de poder a poder con fuerzas muy parejas. El simulador de Montecarlo detecta una alta tendencia de empates o diferencias mínimas."
-
     st.markdown(f"""
     <div class="card-mensaje">
-        <h4>🎯 Marcador Exacto con Mayor Probabilidad</h4>
+        <h4>🎯 Marcador Exacto Reflejado por la Tabla</h4>
         <p style="font-size: 20px; color: #58A6FF; font-weight: bold;">{p_loc} {g_l_pred} - {g_v_pred} {p_vis}</p>
-        <p>Probabilidad matemática exacta: <b>{prob_exacta:.1f}%</b></p>
+        <p>Probabilidad matemática exacta: <b>{prob_exacta:.1f}%</b> (Calculado con los promedios reales de goles de la tabla)</p>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="card-mensaje">
-        <h4>📊 Análisis del Comportamiento (Elo & Simulación)</h4>
-        <p>{mensaje_elo}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown(f"""
-    <div class="card-mensaje">
-        <h4>⚽ Proyecciones, Skellam y Montecarlo (10,000 Partidos Virtuales)</h4>
+        <h4>⚽ Proyecciones y Tendencia de Goles</h4>
         <ul>
             <li><b>¿Ambos equipos marcan (BTTS)?</b> Probabilidad: <b>{btts_prob:.1f}%</b></li>
             <li><b>Línea de Goles (Más de 2.5):</b> Probabilidad: <b>{over_25_prob:.1f}%</b></li>
@@ -344,9 +329,10 @@ with pestanas[2]:
 # PESTAÑA 4: DIAGNÓSTICOS
 # ------------------------------------------
 with pestanas[3]:
-    st.subheader("Análisis Técnico del Motor Multimodelo")
+    st.subheader("Análisis Técnico del Motor")
     st.json({
-        "Modelos Activos": ["Poisson", "Dixon-Coles", "Elo Dinámico", "Distribución Skellam", "Simulador Montecarlo (10k ops)"],
+        "Fuente de Datos": "Tabla de Posiciones en Vivo (Goles a favor y en contra reales)",
+        "Modelos Activos": ["Poisson basado en Tabla", "Elo Dinámico", "Skellam", "Montecarlo"],
         "Total Equipos en Torneo": len(obtener_equipos_torneo(torneo_sel)),
         "Partidos Registrados": len(st.session_state[f'{prefix_act}_partidos'])
     })
