@@ -215,45 +215,50 @@ with pestanas[0]:
     st.dataframe(df_tabla.style.highlight_max(axis=0, subset=["Pts", "DG", "GF"], color="#1E3A8A"), use_container_width=True)
 
 # ------------------------------------------
-# PESTAÑA 2: REGISTRAR PARTIDO
+# PESTAÑA 2: REGISTRAR PARTIDO (CORREGIDO CON FORMULARIO)
 # ------------------------------------------
 with pestanas[1]:
     st.subheader("Ingresar Resultado Oficial")
     equipos_lista = sorted(list(obtener_equipos_torneo(torneo_sel).keys()))
     
-    col1, col2 = st.columns(2)
-    with col1:
-        eq_loc = st.selectbox("Equipo Local:", equipos_lista, key="reg_loc")
-        goles_loc = st.number_input("Goles Local:", min_value=0, max_value=15, value=0, key="g_loc")
-    with col2:
-        eq_vis = st.selectbox("Equipo Visitante:", [e for e in equipos_lista if e != eq_loc], key="reg_vis")
-        goles_vis = st.number_input("Goles Visitante:", min_value=0, max_value=15, value=0, key="g_vis")
-        
-    if st.button("Guardar Partido", type="primary"):
-        st.session_state[f'{prefix_act}_partidos'].append({
-            "local": eq_loc, "goles_local": goles_loc,
-            "visitante": eq_vis, "goles_visitante": goles_vis
-        })
-        
-        t = st.session_state[f'{prefix_act}_tabla']
-        t[eq_loc]["PJ"] += 1; t[eq_vis]["PJ"] += 1
-        t[eq_loc]["GF"] += goles_loc; t[eq_loc]["GC"] += goles_vis
-        t[eq_vis]["GF"] += goles_vis; t[eq_vis]["GC"] += goles_loc
-        t[eq_loc]["DG"] = t[eq_loc]["GF"] - t[eq_loc]["GC"]
-        t[eq_vis]["DG"] = t[eq_vis]["GF"] - t[eq_vis]["GC"]
-        
-        if goles_loc > goles_vis:
-            t[eq_loc]["PG"] += 1; t[eq_loc]["Pts"] += 3
-            t[eq_vis]["PP"] += 1
-        elif goles_loc < goles_vis:
-            t[eq_vis]["PG"] += 1; t[eq_vis]["Pts"] += 3
-            t[eq_loc]["PP"] += 1
-        else:
-            t[eq_loc]["PE"] += 1; t[eq_loc]["Pts"] += 1
-            t[eq_vis]["PE"] += 1; t[eq_vis]["Pts"] += 1
+    with st.form(key=f"form_registrar_{prefix_act}"):
+        col1, col2 = st.columns(2)
+        with col1:
+            eq_loc = st.selectbox("Equipo Local:", equipos_lista)
+            goles_loc = st.number_input("Goles Local:", min_value=0, max_value=15, value=0)
+        with col2:
+            eq_vis = st.selectbox("Equipo Visitante:", equipos_lista)
+            goles_vis = st.number_input("Goles Visitante:", min_value=0, max_value=15, value=0)
             
-        st.success(f"¡Partido {eq_loc} {goles_loc} - {goles_vis} {eq_vis} registrado con éxito!")
-        st.rerun()
+        enviado = st.form_submit_button("Guardar Partido", type="primary")
+        
+        if enviado:
+            if eq_loc == eq_vis:
+                st.error("⚠️ El equipo local y el visitante no pueden ser el mismo.")
+            else:
+                st.session_state[f'{prefix_act}_partidos'].append({
+                    "local": eq_loc, "goles_local": goles_loc,
+                    "visitante": eq_vis, "goles_visitante": goles_vis
+                })
+                
+                t = st.session_state[f'{prefix_act}_tabla']
+                t[eq_loc]["PJ"] += 1; t[eq_vis]["PJ"] += 1
+                t[eq_loc]["GF"] += goles_loc; t[eq_loc]["GC"] += goles_vis
+                t[eq_vis]["GF"] += goles_vis; t[eq_vis]["GC"] += goles_loc
+                t[eq_loc]["DG"] = t[eq_loc]["GF"] - t[eq_loc]["GC"]
+                t[eq_vis]["DG"] = t[eq_vis]["GF"] - t[eq_vis]["GC"]
+                
+                if goles_loc > goles_vis:
+                    t[eq_loc]["PG"] += 1; t[eq_loc]["Pts"] += 3
+                    t[eq_vis]["PP"] += 1
+                elif goles_loc < goles_vis:
+                    t[eq_vis]["PG"] += 1; t[eq_vis]["Pts"] += 3
+                    t[eq_loc]["PP"] += 1
+                else:
+                    t[eq_loc]["PE"] += 1; t[eq_loc]["Pts"] += 1
+                    t[eq_vis]["PE"] += 1; t[eq_vis]["Pts"] += 1
+                    
+                st.success(f"¡Partido guardado con éxito! ({eq_loc} {goles_loc} - {goles_vis} {eq_vis})")
 
 # ------------------------------------------
 # PESTAÑA 3: PRONÓSTICO DIXON-COLES
@@ -296,7 +301,7 @@ with pestanas[3]:
     })
 
 # ------------------------------------------
-# PESTAÑA 5: RESPALDOS (MÓVIL / PC)
+# PESTAÑA 5: RESPALDOS (MÓVIL / PC) - CORREGIDO CON BOTÓN DE CARGA
 # ------------------------------------------
 with pestanas[4]:
     st.subheader("Sistema de Respaldos Multiformato (.txt / .json)")
@@ -336,16 +341,16 @@ with pestanas[4]:
     archivo_subido = st.file_uploader("Selecciona tu archivo de respaldo (.txt o .json):", type=["txt", "json"], key="uploader_respaldo")
     
     if archivo_subido is not None:
-        try:
-            contenido = json.load(archivo_subido)
-            for key, val in contenido.items():
-                st.session_state[key] = val
-            
-            for t_nom in ["Champions League", "Europa League", "Conference League"]:
-                purgar_equipos_fuera_de_lugar(t_nom)
+        if st.button("🔄 Aplicar y Cargar Respaldo", type="primary"):
+            try:
+                contenido = json.load(archivo_subido)
+                for key, val in contenido.items():
+                    st.session_state[key] = val
                 
-            st.success("¡Respaldo restaurado y purgado con éxito!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error al leer el archivo de respaldo: {e}")
-
+                for t_nom in ["Champions League", "Europa League", "Conference League"]:
+                    purgar_equipos_fuera_de_lugar(t_nom)
+                    
+                st.success("¡Respaldo restaurado y purgado con éxito!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al leer el archivo de respaldo: {e}")
