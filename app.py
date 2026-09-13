@@ -24,7 +24,7 @@ st.markdown("""
         text-align: center;
     }
 </style>
-""", unsafe_allowed_syntax=True)
+""", unsafe_allow_html=True)
 
 # ==========================================
 # DICCIONARIOS OFICIALES DE EQUIPOS (LISTAS ESTRICTAS POR TORNEO)
@@ -348,3 +348,4 @@ with pestanas[4]:
             st.rerun()
         except Exception as e:
             st.error(f"Error al leer el archivo de respaldo: {e}")
+
